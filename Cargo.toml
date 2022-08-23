@@ -1,0 +1,12 @@
+[package]
+name = "egui_graph"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+egui = "0.13.1"
+
+[dev-dependencies]
+nannou = "0.17.1"
+nannou_egui = "0.4"
+petgraph = "0.6"
