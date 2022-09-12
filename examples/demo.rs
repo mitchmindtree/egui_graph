@@ -60,7 +60,7 @@ fn model(app: &App) -> Model {
     // Setup egui.
     let window = app.window(w_id).unwrap();
     let egui = Egui::from_window(&window);
-    egui.ctx().set_fonts(fonts());
+    egui.ctx().set_fonts(egui::FontDefinitions::default());
     egui.ctx().set_style(style());
 
     // The graph we want to inspect/edit.
@@ -84,7 +84,8 @@ fn model(app: &App) -> Model {
     // We don't have any fancy automatic layout yet, so set some reasonable initial positions.
     view.layout.insert(egui::Id::new(a), [-400.0, 0.0].into());
     view.layout.insert(egui::Id::new(b), [-150.0, 100.0].into());
-    view.layout.insert(egui::Id::new(c), [-200.0, -100.0].into());
+    view.layout
+        .insert(egui::Id::new(c), [-200.0, -100.0].into());
     view.layout.insert(egui::Id::new(d), [50.0, 0.0].into());
     view.layout.insert(egui::Id::new(e), [200.0, 0.0].into());
 
@@ -124,7 +125,10 @@ fn update(_app: &App, model: &mut Model, update: Update) {
             frame.shadow.extrusion = 0.0;
             egui::Window::new("Graph Config")
                 .frame(frame)
-                .anchor(egui::Align2::LEFT_TOP, ui.spacing().window_padding)
+                .anchor(
+                    egui::Align2::LEFT_TOP,
+                    ui.spacing().window_margin.left_top(),
+                )
                 .collapsible(false)
                 .title_bar(false)
                 .auto_sized()
@@ -141,11 +145,7 @@ fn update(_app: &App, model: &mut Model, update: Update) {
         });
 }
 
-fn nodes(
-    nctx: &mut egui_graph::NodesCtx,
-    ui: &mut egui::Ui,
-    state: &mut State,
-) {
+fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) {
     let indices: Vec<_> = state.graph.node_indices().collect();
     for n in indices {
         let inputs = state
@@ -211,7 +211,11 @@ fn nodes(
                                 SocketKind::Output => (n, src, (index, ix)),
                             };
                             // Check that this edge doesn't already exist.
-                            if !state.graph.edges(a).any(|e| e.target() == b && *e.weight() == w) {
+                            if !state
+                                .graph
+                                .edges(a)
+                                .any(|e| e.target() == b && *e.weight() == w)
+                            {
                                 state.graph.add_edge(a, b, w);
                             }
                         }
@@ -272,40 +276,11 @@ fn node(name: impl ToString, kind: NodeKind) -> Node {
 }
 
 // TODO: Remove this. Just use defaults for example.
-fn fonts() -> egui::FontDefinitions {
-    let mut fonts = egui::FontDefinitions::default();
-    let entries = [
-        (
-            egui::TextStyle::Small,
-            (egui::FontFamily::Proportional, 13.0),
-        ),
-        (
-            egui::TextStyle::Body,
-            (egui::FontFamily::Proportional, 16.0),
-        ),
-        (
-            egui::TextStyle::Button,
-            (egui::FontFamily::Proportional, 16.0),
-        ),
-        (
-            egui::TextStyle::Heading,
-            (egui::FontFamily::Proportional, 20.0),
-        ),
-        (
-            egui::TextStyle::Monospace,
-            (egui::FontFamily::Monospace, 14.0),
-        ),
-    ];
-    fonts.family_and_size.extend(entries.iter().cloned());
-    fonts
-}
-
-// TODO: Remove this. Just use defaults for example.
 fn style() -> egui::Style {
     let mut style = egui::Style::default();
     style.spacing = egui::style::Spacing {
         item_spacing: egui::Vec2::splat(8.0),
-        window_padding: egui::Vec2::new(6.0, 6.0),
+        window_margin: egui::style::Margin::same(6.0),
         button_padding: egui::Vec2::new(4.0, 2.0),
         interact_size: egui::Vec2::new(56.0, 24.0),
         indent: 10.0,
