@@ -69,7 +69,11 @@ impl Cubic {
         self.flatten(distance_per_point)
             .fold((self.from, std::f32::MAX), |closest, p| {
                 let dist_sq = p.distance_sq(target);
-                if dist_sq < closest.1 { (p, dist_sq) } else { closest }
+                if dist_sq < closest.1 {
+                    (p, dist_sq)
+                } else {
+                    closest
+                }
             })
             .0
     }
@@ -119,7 +123,9 @@ impl Cubic {
         let rt = rect.right_top();
         let rb = rect.right_bottom();
         let lines = [(lt, rt), (rt, rb), (rb, lb)];
-        lines.iter().any(|&l| self.intersects_line(distance_per_point, l))
+        lines
+            .iter()
+            .any(|&l| self.intersects_line(distance_per_point, l))
     }
 }
 

@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
+use std::sync::{Arc, Mutex};
 
 pub mod bezier;
 pub mod node;
@@ -12,7 +13,7 @@ pub struct Graph {
 
 /// State related to the graph UI.
 #[derive(Clone, Default)]
-struct GraphTempMemory {
+pub struct GraphTempMemory {
     /// The most recently recorded size of each node.
     ///
     /// Primarily used to check for node selection, as we don't know the size of the node until the
@@ -180,7 +181,7 @@ impl Graph {
     /// Begin showing the parts of the Graph.
     pub fn show(self, view: &mut View, ui: &mut egui::Ui) -> Show {
         // The full area to be occuppied by the graph.
-        let full_rect = ui.available_rect_before_wrap_finite();
+        let full_rect = ui.available_rect_before_wrap();
         let half_size = full_rect.size() * 0.5;
 
         // Draw the selection rectangle if there is one.
@@ -192,12 +193,12 @@ impl Graph {
         let ptr_on_graph = ui.rect_contains_pointer(full_rect);
 
         // Check for selection rectangle and node dragging.
-        let mut gmem = memory_mut(ui, self.id);
-        let pointer = &ui.input().pointer;
+        let gmem_arc = memory(ui, self.id);
+        let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
+        let pointer = ui.input().pointer.clone();
         if let Some(ptr_screen) = pointer.interact_pos().or(pointer.hover_pos()) {
             // The location of the pointer over the graph.
             let ptr_graph = view.camera.screen_to_graph(full_rect, ptr_screen);
-
             // Check for the closest socket.
             // TODO: if we wanted to be super efficient, we could maintain a quadtree of nodes
             // and sockets...
@@ -236,9 +237,7 @@ impl Graph {
                             };
                             closest_socket = match closest_socket {
                                 None => Some((socket, dist_sq)),
-                                Some((_, d_sq)) if dist_sq < d_sq => {
-                                    Some((socket, dist_sq))
-                                }
+                                Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
                                 _ => closest_socket,
                             }
                         }
@@ -255,9 +254,7 @@ impl Graph {
                             };
                             closest_socket = match closest_socket {
                                 None => Some((socket, dist_sq)),
-                                Some((_, d_sq)) if dist_sq < d_sq => {
-                                    Some((socket, dist_sq))
-                                }
+                                Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
                                 _ => closest_socket,
                             }
                         }
@@ -271,7 +268,9 @@ impl Graph {
             if let Some(pressed) = gmem.pressed.as_mut() {
                 pressed.current_pos = ptr_graph;
                 match pressed.action {
-                    PressAction::DragNodes { node: Some(ref node) } => {
+                    PressAction::DragNodes {
+                        node: Some(ref node),
+                    } => {
                         // Determine the drag delta.
                         let delta = ptr_graph - pressed.origin_pos;
                         let target = node.position_at_origin + delta;
@@ -377,7 +376,11 @@ impl Graph {
             if move_camera {
                 let max_vel = 8.0;
                 let mid = full_rect.center();
-                let move_dist = ui.spacing().interact_size.x.max(ui.spacing().interact_size.y);
+                let move_dist = ui
+                    .spacing()
+                    .interact_size
+                    .x
+                    .max(ui.spacing().interact_size.y);
                 let x_vel = if ptr_screen.x < mid.x {
                     (ptr_screen.x - (full_rect.min.x + move_dist)).min(0.0) * max_vel / move_dist
                 } else if ptr_screen.x > mid.x {
@@ -396,7 +399,6 @@ impl Graph {
                 view.camera.pos += vel;
             }
         }
-        std::mem::drop(gmem);
 
         // Check if we should drag or scroll the camera position.
         if !ptr_in_use && ptr_on_graph {
@@ -423,8 +425,10 @@ impl Graph {
         let visible_rect = egui::Rect::from_center_size(view.camera.pos, full_rect.size());
         let dot_step = ui.spacing().interact_size.y;
         let vis = ui.style().noninteractive();
-        let x_dots = (visible_rect.min.x / dot_step) as i32..=(visible_rect.max.x / dot_step) as i32;
-        let y_dots = (visible_rect.min.y / dot_step) as i32..=(visible_rect.max.y / dot_step) as i32;
+        let x_dots =
+            (visible_rect.min.x / dot_step) as i32..=(visible_rect.max.x / dot_step) as i32;
+        let y_dots =
+            (visible_rect.min.y / dot_step) as i32..=(visible_rect.max.y / dot_step) as i32;
         let x_start = half_size.x - view.camera.pos.x;
         let y_start = half_size.y - view.camera.pos.y;
         for x_dot in x_dots {
@@ -584,7 +588,8 @@ impl Show {
             ref mut ui,
             ..
         } = *self;
-        let mut gmem = memory_mut(ui, graph_id);
+        let gmem_arc = memory(ui, graph_id);
+        let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
         gmem.node_sizes.retain(|k, _| visited.contains(k));
         gmem.selection.nodes.retain(|k| visited.contains(k));
         if let Some(socket) = gmem.closest_socket.as_ref() {
@@ -594,8 +599,14 @@ impl Show {
         }
         if let Some(pressed) = gmem.pressed.as_ref() {
             match pressed.action {
-                PressAction::DragNodes { node: Some(PressedNode { id: n, .. }) }
-                | PressAction::Socket(node::Socket { node: n, .. }) if !visited.contains(&n) => gmem.pressed = None,
+                PressAction::DragNodes {
+                    node: Some(PressedNode { id: n, .. }),
+                }
+                | PressAction::Socket(node::Socket { node: n, .. })
+                    if !visited.contains(&n) =>
+                {
+                    gmem.pressed = None
+                }
                 _ => (),
             }
         }
@@ -606,8 +617,14 @@ impl EdgesCtx {
     /// Retrieves the position and normal of the specified input for the given node.
     ///
     /// Returns `None` if either the `node` or `input` do not exist.
-    pub fn input(&self, ui: &egui::Ui, node: egui::Id, input: usize) -> Option<(egui::Pos2, egui::Vec2)> {
-        let gmem = memory_mut(ui, self.graph_id);
+    pub fn input(
+        &self,
+        ui: &egui::Ui,
+        node: egui::Id,
+        input: usize,
+    ) -> Option<(egui::Pos2, egui::Vec2)> {
+        let gmem_arc = crate::memory(ui, self.graph_id);
+        let gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
         gmem.sockets
             .get(&node)
             .and_then(|sockets| sockets.input(input))
@@ -616,8 +633,14 @@ impl EdgesCtx {
     /// Retrieves the position and normal of the specified output for the given node.
     ///
     /// Returns `None` if either the `node` or `output` do not exist.
-    pub fn output(&self, ui: &egui::Ui, node: egui::Id, output: usize) -> Option<(egui::Pos2, egui::Vec2)> {
-        let gmem = memory_mut(ui, self.graph_id);
+    pub fn output(
+        &self,
+        ui: &egui::Ui,
+        node: egui::Id,
+        output: usize,
+    ) -> Option<(egui::Pos2, egui::Vec2)> {
+        let gmem_arc = memory(ui, self.graph_id);
+        let gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
         gmem.sockets
             .get(&node)
             .and_then(|sockets| sockets.output(output))
@@ -625,7 +648,8 @@ impl EdgesCtx {
 
     /// If the user is in the progress of creating an edge, this returns the relevant info.
     pub fn in_progress(&self, ui: &egui::Ui) -> Option<EdgeInProgress> {
-        let gmem = memory_mut(ui, self.graph_id);
+        let gmem_arc = memory(ui, self.graph_id);
+        let gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
         let pressed = gmem.pressed.as_ref()?;
         let start = match pressed.action {
             PressAction::Socket(socket) => {
@@ -634,7 +658,11 @@ impl EdgesCtx {
                     node::SocketKind::Input => sockets.input(socket.index)?,
                     node::SocketKind::Output => sockets.output(socket.index)?,
                 };
-                node::PositionedSocket { socket, pos, normal }
+                node::PositionedSocket {
+                    socket,
+                    pos,
+                    normal,
+                }
             }
             _ => return None,
         };
@@ -684,7 +712,11 @@ pub struct EdgeInProgress {
 impl EdgeInProgress {
     pub fn bezier_cubic(&self) -> bezier::Cubic {
         let start = (self.start.pos, self.start.normal);
-        let end_normal = self.end_socket.as_ref().map(|&(_, n)| n).unwrap_or(-self.start.normal);
+        let end_normal = self
+            .end_socket
+            .as_ref()
+            .map(|&(_, n)| n)
+            .unwrap_or(-self.start.normal);
         let end = (self.end_pos, end_normal);
         bezier::Cubic::from_edge_points(start, end)
     }
@@ -702,11 +734,11 @@ pub fn id(id_src: impl Hash) -> egui::Id {
 }
 
 /// Short-hand for retrieving access to the graph's temporary memory from the `Ui`.
-fn memory_mut(ui: &egui::Ui, graph_id: egui::Id) -> egui::mutex::RwLockWriteGuard<GraphTempMemory> {
-    let mem = ui.memory();
-    egui::mutex::RwLockWriteGuard::map(mem, |mem| {
-        mem.id_data_temp.get_mut_or_insert_with(graph_id, GraphTempMemory::default)
-    })
+fn memory(ui: &egui::Ui, graph_id: egui::Id) -> Arc<Mutex<GraphTempMemory>> {
+    ui.ctx()
+        .data()
+        .get_temp_mut_or_default::<Arc<Mutex<GraphTempMemory>>>(graph_id)
+        .clone()
 }
 
 fn graph_to_screen(cam_pos: egui::Pos2, graph_rect: egui::Rect, pos: egui::Pos2) -> egui::Pos2 {
