@@ -3,10 +3,31 @@ name = "egui_graph"
 version = "0.1.0"
 edition = "2018"
 
+# Required for wgpu v0.10 feature resolution.
+resolver = "2"
+
 [dependencies]
-egui = "0.13.1"
+egui = "0.19.0"
 
 [dev-dependencies]
-nannou = "0.17.1"
-nannou_egui = "0.4"
+nannou = "0.18.1"
+nannou_egui = "0.5"
 petgraph = "0.6"
+
+[patch.crates-io.nannou]
+path = "../../nannou/nannou"
+
+[patch.crates-io.nannou_egui]
+path = "../../nannou/nannou_egui"
+
+[patch.crates-io]
+egui = { path = '../../crates/egui/crates/egui' }
+egui-wgpu = { path = '../../crates/egui/crates/egui-wgpu' }
+epaint = { path = '../../crates/egui/crates/epaint' }
+
+# egui-wgpu = { git = 'https://github.com/emilk/egui', branch = "master" }
+# egui = { git = 'https://github.com/emilk/egui', branch = "master" }
+# epaint = { git = 'https://github.com/emilk/egui', branch = "master" }
+
+[patch.crates-io]
+log = { git = "https://github.com/rust-lang/log" }
