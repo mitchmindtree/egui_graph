@@ -564,9 +564,6 @@ pub fn default_frame(style: &egui::Style) -> egui::Frame {
     let mut frame = egui::Frame::window(style);
     frame.shadow.extrusion *= 0.0;
     frame.stroke.width = 0.0;
-    frame.rounding = egui::Rounding::same(0.0);
-    frame.inner_margin = egui::style::Margin::same(2.0);
-    frame.fill = egui::Color32::from_gray(126);
     frame
 }
 
