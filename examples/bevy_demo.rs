@@ -1,19 +1,96 @@
+use bevy::prelude::*;
+use bevy_egui::{egui, EguiContext, EguiPlugin};
 use egui_graph::node::{EdgeEvent, SocketKind};
-use nannou::prelude::*;
-use nannou_egui::Egui;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
 fn main() {
-    nannou::app(model).update(update).run();
+    App::new()
+        .init_resource::<State>()
+        .add_plugins(DefaultPlugins)
+        .add_plugin(EguiPlugin)
+        .add_startup_system(initialize)
+        .add_system(update)
+        .run();
 }
 
-struct Model {
-    egui: Egui,
-    state: State,
+fn initialize(mut commands: Commands, mut egui: ResMut<EguiContext>) {
+    egui.ctx_mut().set_fonts(egui::FontDefinitions::default());
+    egui.ctx_mut().set_style(style());
+
+    // The graph we want to inspect/edit.
+    let mut graph = Graph::new();
+    let a = graph.add_node(node("Foo", NodeKind::Label));
+    let b = graph.add_node(node("Bar", NodeKind::Button));
+    let c = graph.add_node(node("Baz", NodeKind::Slider(0.5)));
+    let d = graph.add_node(node("Qux", NodeKind::DragValue(20.0)));
+    let comment = "Nodes are a thin wrapper around the `egui::Window`, \
+        allowing you to set arbitrary widgets.";
+    let e = graph.add_node(node("Fiz", NodeKind::Comment(comment.to_string())));
+    graph.add_edge(a, c, (0, 0));
+    graph.add_edge(a, d, (1, 1));
+    graph.add_edge(b, d, (0, 2));
+    graph.add_edge(c, d, (0, 0));
+    graph.add_edge(d, e, (0, 0));
+
+    // Describes the camera position and layout of the nodes.
+    let mut view = egui_graph::View::default();
+
+    // We don't have any fancy automatic layout yet, so set some reasonable initial positions.
+    view.layout.insert(egui::Id::new(a), [-400.0, 0.0].into());
+    view.layout.insert(egui::Id::new(b), [-150.0, 100.0].into());
+    view.layout
+        .insert(egui::Id::new(c), [-200.0, -100.0].into());
+    view.layout.insert(egui::Id::new(d), [50.0, 0.0].into());
+    view.layout.insert(egui::Id::new(e), [200.0, 0.0].into());
+
+    commands.insert_resource(State {
+        graph,
+        view,
+        interaction: Default::default(),
+        flow: egui::Direction::LeftToRight,
+    });
 }
 
+fn update(
+    mut egui_context: ResMut<EguiContext>,
+    mut state: ResMut<State>,
+) {
+    egui::containers::CentralPanel::default()
+        .frame(egui::Frame::default())
+        .show(&egui_context.ctx_mut(), |ui| {
+            egui_graph::Graph::new("Demo Graph")
+                .show(&mut state.view, ui)
+                .nodes(|nctx, ui| nodes(nctx, ui, &mut state))
+                .edges(|ectx, ui| edges(ectx, ui, &mut state));
+
+            // Overlay some configuration for the graph.
+            let mut frame = egui::Frame::window(ui.style());
+            frame.shadow.extrusion = 0.0;
+            egui::Window::new("Graph Config")
+                .frame(frame)
+                .anchor(
+                    egui::Align2::LEFT_TOP,
+                    ui.spacing().window_margin.left_top(),
+                )
+                .collapsible(false)
+                .title_bar(false)
+                .auto_sized()
+                .show(ui.ctx(), |ui| {
+                    ui.label("GRAPH CONFIG");
+                    ui.horizontal(|ui| {
+                        ui.label("Flow:");
+                        ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");
+                        ui.radio_value(&mut state.flow, egui::Direction::TopDown, "Down");
+                        ui.radio_value(&mut state.flow, egui::Direction::RightToLeft, "Left");
+                        ui.radio_value(&mut state.flow, egui::Direction::BottomUp, "Up");
+                    });
+                });
+        });
+}
+
+#[derive(Resource)]
 struct State {
     graph: Graph,
     view: egui_graph::View,
@@ -46,103 +123,6 @@ enum NodeKind {
     Slider(f32),
     DragValue(f32),
     Comment(String),
-}
-
-fn model(app: &App) -> Model {
-    let w_id = app
-        .new_window()
-        .title("egui_graph - demo")
-        .view(view)
-        .raw_event(raw_window_event)
-        .build()
-        .unwrap();
-
-    // Setup egui.
-    let window = app.window(w_id).unwrap();
-    let egui = Egui::from_window(&window);
-    egui.ctx().set_fonts(fonts());
-    egui.ctx().set_style(style());
-
-    // The graph we want to inspect/edit.
-    let mut graph = Graph::new();
-    let a = graph.add_node(node("Foo", NodeKind::Label));
-    let b = graph.add_node(node("Bar", NodeKind::Button));
-    let c = graph.add_node(node("Baz", NodeKind::Slider(0.5)));
-    let d = graph.add_node(node("Qux", NodeKind::DragValue(20.0)));
-    let comment = "Nodes are a thin wrapper around the `egui::Window`, \
-        allowing you to set arbitrary widgets.";
-    let e = graph.add_node(node("Fiz", NodeKind::Comment(comment.to_string())));
-    graph.add_edge(a, c, (0, 0));
-    graph.add_edge(a, d, (1, 1));
-    graph.add_edge(b, d, (0, 2));
-    graph.add_edge(c, d, (0, 0));
-    graph.add_edge(d, e, (0, 0));
-
-    // Describes the camera position and layout of the nodes.
-    let mut view = egui_graph::View::default();
-
-    // We don't have any fancy automatic layout yet, so set some reasonable initial positions.
-    view.layout.insert(egui::Id::new(a), [-400.0, 0.0].into());
-    view.layout.insert(egui::Id::new(b), [-150.0, 100.0].into());
-    view.layout
-        .insert(egui::Id::new(c), [-200.0, -100.0].into());
-    view.layout.insert(egui::Id::new(d), [50.0, 0.0].into());
-    view.layout.insert(egui::Id::new(e), [200.0, 0.0].into());
-
-    Model {
-        egui,
-        state: State {
-            graph,
-            view,
-            interaction: Default::default(),
-            flow: egui::Direction::LeftToRight,
-        },
-    }
-}
-
-fn raw_window_event(_app: &App, model: &mut Model, event: &nannou::winit::event::WindowEvent) {
-    model.egui.handle_raw_event(event);
-}
-
-fn update(_app: &App, model: &mut Model, update: Update) {
-    let Model {
-        ref mut egui,
-        ref mut state,
-        ..
-    } = *model;
-    egui.set_elapsed_time(update.since_start);
-    let ctx = egui.begin_frame();
-    egui::containers::CentralPanel::default()
-        .frame(egui::Frame::default())
-        .show(&ctx, |ui| {
-            egui_graph::Graph::new("Demo Graph")
-                .show(&mut state.view, ui)
-                .nodes(|nctx, ui| nodes(nctx, ui, state))
-                .edges(|ectx, ui| edges(ectx, ui, state));
-
-            // Overlay some configuration for the graph.
-            let mut frame = egui::Frame::window(ui.style());
-            frame.shadow.extrusion = 0.0;
-            egui::Window::new("Graph Config")
-                .frame(frame)
-                .anchor(
-                    egui::Align2::LEFT_TOP,
-                    ui.spacing().window_margin.left_top(),
-                )
-                .collapsible(false)
-                .title_bar(false)
-                .auto_sized()
-                .show(ui.ctx(), |ui| {
-                    ui.label("GRAPH CONFIG");
-                    ui.horizontal(|ui| {
-                        ui.label("Flow:");
-                        ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");
-                        ui.radio_value(&mut state.flow, egui::Direction::TopDown, "Down");
-                        ui.radio_value(&mut state.flow, egui::Direction::RightToLeft, "Left");
-                        ui.radio_value(&mut state.flow, egui::Direction::BottomUp, "Up");
-                    });
-                });
-        });
 }
 
 fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) {
@@ -265,10 +245,6 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
     }
 }
 
-fn view(_app: &App, model: &Model, frame: Frame) {
-    frame.clear(BLACK);
-    model.egui.draw_to_frame(&frame);
-}
 
 fn node(name: impl ToString, kind: NodeKind) -> Node {
     let name = name.to_string();
@@ -276,40 +252,10 @@ fn node(name: impl ToString, kind: NodeKind) -> Node {
 }
 
 // TODO: Remove this. Just use defaults for example.
-fn fonts() -> egui::FontDefinitions {
-    let mut fonts = egui::FontDefinitions::default();
-    let entries = [
-        (
-            egui::TextStyle::Small,
-            (egui::FontFamily::Proportional, 13.0),
-        ),
-        (
-            egui::TextStyle::Body,
-            (egui::FontFamily::Proportional, 16.0),
-        ),
-        (
-            egui::TextStyle::Button,
-            (egui::FontFamily::Proportional, 16.0),
-        ),
-        (
-            egui::TextStyle::Heading,
-            (egui::FontFamily::Proportional, 20.0),
-        ),
-        (
-            egui::TextStyle::Monospace,
-            (egui::FontFamily::Monospace, 14.0),
-        ),
-    ];
-    fonts.family_and_size.extend(entries.iter().cloned());
-    fonts
-}
-
-// TODO: Remove this. Just use defaults for example.
 fn style() -> egui::Style {
     let mut style = egui::Style::default();
     style.spacing = egui::style::Spacing {
         item_spacing: egui::Vec2::splat(8.0),
-        window_margin: egui::style::Margin::same(6.0),
         button_padding: egui::Vec2::new(4.0, 2.0),
         interact_size: egui::Vec2::new(56.0, 24.0),
         indent: 10.0,
@@ -324,4 +270,15 @@ fn style() -> egui::Style {
     style.visuals.widgets.noninteractive.bg_stroke.color = egui::Color32::BLACK;
     style.visuals.widgets.noninteractive.fg_stroke.color = egui::Color32::WHITE;
     style
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            graph: Default::default(),
+            view: Default::default(),
+            interaction: Default::default(),
+            flow: egui::Direction::LeftToRight,
+        }
+    }
 }
