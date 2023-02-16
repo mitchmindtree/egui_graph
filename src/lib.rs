@@ -411,8 +411,8 @@ impl Graph {
         }
 
         // Paint the background rect.
-        if dbg!(self.background) {
-            let vis = dbg!(ui.style().noninteractive());
+        if self.background {
+            let vis = ui.style().noninteractive();
             let stroke = egui::Stroke {
                 width: 0.0,
                 ..vis.bg_stroke
