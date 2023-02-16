@@ -263,6 +263,7 @@ impl Node {
             .fixed_pos(pos_screen)
             .collapsible(false)
             .title_bar(false)
+            .auto_sized()
             .drag_bounds(egui::Rect::EVERYTHING)
             .show(ui.ctx(), move |ui| {
                 // Ensure the ui is at least large enough to provide space for inputs/outputs.

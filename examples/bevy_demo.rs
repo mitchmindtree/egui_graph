@@ -53,10 +53,7 @@ fn initialize(mut commands: Commands, mut egui: ResMut<EguiContext>) {
     });
 }
 
-fn update(
-    mut egui_context: ResMut<EguiContext>,
-    mut state: ResMut<State>,
-) {
+fn update(mut egui_context: ResMut<EguiContext>, mut state: ResMut<State>) {
     egui::containers::CentralPanel::default()
         .frame(egui::Frame::default())
         .show(&egui_context.ctx_mut(), |ui| {
@@ -244,7 +241,6 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         ui.painter().add(egui::Shape::line(pts, stroke));
     }
 }
-
 
 fn node(name: impl ToString, kind: NodeKind) -> Node {
     let name = name.to_string();
