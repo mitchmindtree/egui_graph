@@ -2,8 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
-use egui::color;
-
 pub mod bezier;
 pub mod node;
 

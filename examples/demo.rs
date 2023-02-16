@@ -60,7 +60,7 @@ fn model(app: &App) -> Model {
     // Setup egui.
     let window = app.window(w_id).unwrap();
     let egui = Egui::from_window(&window);
-    egui.ctx().set_fonts(egui::FontDefinitions::default());
+    egui.ctx().set_fonts(fonts());
     egui.ctx().set_style(style());
 
     // The graph we want to inspect/edit.
@@ -273,6 +273,35 @@ fn view(_app: &App, model: &Model, frame: Frame) {
 fn node(name: impl ToString, kind: NodeKind) -> Node {
     let name = name.to_string();
     Node { name, kind }
+}
+
+// TODO: Remove this. Just use defaults for example.
+fn fonts() -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::default();
+    let entries = [
+        (
+            egui::TextStyle::Small,
+            (egui::FontFamily::Proportional, 13.0),
+        ),
+        (
+            egui::TextStyle::Body,
+            (egui::FontFamily::Proportional, 16.0),
+        ),
+        (
+            egui::TextStyle::Button,
+            (egui::FontFamily::Proportional, 16.0),
+        ),
+        (
+            egui::TextStyle::Heading,
+            (egui::FontFamily::Proportional, 20.0),
+        ),
+        (
+            egui::TextStyle::Monospace,
+            (egui::FontFamily::Monospace, 14.0),
+        ),
+    ];
+    fonts.family_and_size.extend(entries.iter().cloned());
+    fonts
 }
 
 // TODO: Remove this. Just use defaults for example.
