@@ -56,16 +56,10 @@ pub struct NodeResponse {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum EdgeEvent {
     /// Occurs if a socket was just pressed to start creating an edge.
-    Started {
-        kind: SocketKind,
-        index: usize,
-    },
+    Started { kind: SocketKind, index: usize },
     /// Occurs when the primary mouse button was released creating an edge ending at the specified
     /// socket.
-    Ended {
-        kind: SocketKind,
-        index: usize,
-    },
+    Ended { kind: SocketKind, index: usize },
     /// If there was an edge in progress starting from this node, this indicates that it was
     /// cancelled.
     Cancelled,
@@ -98,7 +92,7 @@ impl Node {
         self
     }
 
-    /// Optionall specify the max width of the `Node`'s window.
+    /// Optionally specify the max width of the `Node`'s window.
     ///
     /// By default, `ui.spacing().text_edit_width` is used.
     pub fn max_width(mut self, w: f32) -> Self {
@@ -183,12 +177,11 @@ impl Node {
             .x
             .min(ui.spacing().interact_size.y);
         let mut min_size = egui::Vec2::splat(min_interact_len);
-
         // However, it should also always be at least large enough to comfortably show all
         // inlets/outlets.
         let max_sockets = std::cmp::max(self.inputs, self.outputs);
         let min_socket_gap = min_interact_len + min_item_spacing;
-        let win_corner_radius = ui.visuals().window_corner_radius;
+        let win_corner_radius = ui.visuals().window_rounding.ne;
         let socket_padding = win_corner_radius + min_interact_len * 0.5;
         let min_len = socket_padding * 2.0 + (max_sockets - 1) as f32 * min_socket_gap;
         if max_sockets > 1 {
@@ -201,7 +194,6 @@ impl Node {
                 }
             }
         }
-
         // Retrieve the frame for the window.
         let mut frame = self.frame.unwrap_or_else(|| default_frame(ui.style()));
 
@@ -215,8 +207,8 @@ impl Node {
         // NOTE: We use the size from last frame as we don't know the size until the user's content
         // is added... Is there a better way to handle this?
         let (mut selected, in_selection_rect) = {
-            let mut gmem = crate::memory_mut(ui, ctx.graph_id);
-
+            let gmem_arc = crate::memory(ui, ctx.graph_id);
+            let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
             let in_selection_rect = match ctx.selection_rect {
                 None => false,
                 Some(sel_rect) => {
@@ -247,7 +239,6 @@ impl Node {
 
             (selected, in_selection_rect)
         };
-
         // Style the frame based on interaction.
         if selected {
             frame.stroke = ui.visuals().selection.stroke;
@@ -261,6 +252,7 @@ impl Node {
         let mut response = egui::Window::new("")
             .id(self.id)
             .frame(frame)
+            .resizable(false)
             // TODO: These `min_*` and `default_size` methods seem to be totally ignored? Should
             // fix this upstream, but for now we just set min size on the window's `Ui` instead.
             .min_width(min_size.x)
@@ -281,12 +273,14 @@ impl Node {
                 // Set the user's content.
                 content(ui);
             })
-            .expect("node windows are always open");
+            .expect("node windows are always open")
+            .response;
 
         // Update the stored data for this node and check for edge events.
         let mut edge_event = None;
         {
-            let mut gmem = crate::memory_mut(ui, ctx.graph_id);
+            let gmem_arc = crate::memory(ui, ctx.graph_id);
+            let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
             gmem.node_sizes.insert(self.id, response.rect.size());
 
             let ctrl_down = ui.input().modifiers.ctrl;
@@ -325,11 +319,12 @@ impl Node {
                 }
 
                 // Also check for deselection.
-                if !ctrl_down && !gmem
-                    .pressed
-                    .as_ref()
-                    .map(|p| p.over_selection_at_origin)
-                    .unwrap_or(false)
+                if !ctrl_down
+                    && !gmem
+                        .pressed
+                        .as_ref()
+                        .map(|p| p.over_selection_at_origin)
+                        .unwrap_or(false)
                 {
                     selection_changed = gmem.selection.nodes.remove(&self.id);
                     selected = false;
@@ -340,7 +335,7 @@ impl Node {
                 if let Some(c) = gmem.closest_socket {
                     if r.kind == c.kind && self.id == r.node {
                         edge_event = Some(EdgeEvent::Cancelled);
-                    } else if self.id == c.node && primary_released(ui.input()) {
+                    } else if self.id == c.node && primary_released(&ui.input()) {
                         let kind = c.kind;
                         let index = c.index;
                         edge_event = Some(EdgeEvent::Ended { kind, index });
@@ -427,18 +422,20 @@ impl Node {
                     step: out_step,
                 },
             };
-            let mut gmem = crate::memory_mut(ui, ctx.graph_id);
+            let gmem_arc = crate::memory(ui, ctx.graph_id);
+            let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
             gmem.sockets.insert(self.id, sockets);
 
             // Check whether or not this node has a pressed socket.
-            let pressed_socket = gmem.pressed.as_ref().and_then(|pressed| {
-                match pressed.action {
+            let pressed_socket = gmem
+                .pressed
+                .as_ref()
+                .and_then(|pressed| match pressed.action {
                     crate::PressAction::Socket(socket) if socket.node == self.id => {
                         Some((socket.kind, socket.index))
-                    },
-                    _ => None
-                }
-            });
+                    }
+                    _ => None,
+                });
 
             // Check if the mouse is closest to one of this node's sockets.
             let closest_socket = match gmem.closest_socket {
@@ -446,10 +443,12 @@ impl Node {
                     // If there is a pressed socket, only highlight if this socket is of the
                     // opposite kind.
                     match gmem.pressed.as_ref().map(|p| &p.action) {
-                        Some(crate::PressAction::Socket(socket)) if closest.kind == socket.kind => None,
+                        Some(crate::PressAction::Socket(socket)) if closest.kind == socket.kind => {
+                            None
+                        }
                         _ => Some((closest.kind, closest.index)),
                     }
-                },
+                }
                 _ => None,
             };
 
@@ -491,7 +490,8 @@ impl Node {
         // If the delete key was pressed and the node is selected, remove it.
         let removed = if selected && ui.input().key_pressed(egui::Key::Delete) {
             // Remove ourselves from the selection.
-            let mut gmem = crate::memory_mut(ui, ctx.graph_id);
+            let gmem_arc = crate::memory(ui, ctx.graph_id);
+            let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
             selection_changed = gmem.selection.nodes.remove(&self.id);
             selected = false;
             true
@@ -578,8 +578,13 @@ fn primary_pressed(pointer: &egui::PointerState) -> bool {
 }
 
 fn primary_released(input: &egui::InputState) -> bool {
-    input.pointer.any_released() && input.events.iter().any(|e| match e {
-        egui::Event::PointerButton { button: egui::PointerButton::Primary, pressed: false, .. } => true,
-        _ => false,
-    })
+    input.pointer.any_released()
+        && input.events.iter().any(|e| match e {
+            egui::Event::PointerButton {
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                ..
+            } => true,
+            _ => false,
+        })
 }
