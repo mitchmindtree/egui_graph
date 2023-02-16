@@ -417,9 +417,8 @@ impl Graph {
                 width: 0.0,
                 ..vis.bg_stroke
             };
-            let _fill = vis.bg_fill.linear_multiply(0.5);
-            ui.painter()
-                .rect(full_rect, 0.0, egui::Color32::from_gray(13), stroke);
+            let fill = vis.bg_fill.linear_multiply(0.5);
+            ui.painter().rect(full_rect, 0.0, fill, stroke);
         }
 
         // Paint some subtle dots to check camera movement.

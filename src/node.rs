@@ -13,7 +13,6 @@ pub struct Node {
     outputs: usize,
     flow: egui::Direction,
     max_width: Option<f32>,
-    auto_sized: bool,
 }
 
 /// Describes either an input or output.
@@ -82,7 +81,6 @@ impl Node {
             inputs: 0,
             outputs: 0,
             flow: egui::Direction::LeftToRight,
-            auto_sized: false,
         }
     }
 
@@ -99,11 +97,6 @@ impl Node {
     /// By default, `ui.spacing().text_edit_width` is used.
     pub fn max_width(mut self, w: f32) -> Self {
         self.max_width = Some(w);
-        self
-    }
-
-    pub fn auto_sized(mut self, b: bool) -> Self {
-        self.auto_sized = b;
         self
     }
 
@@ -204,6 +197,9 @@ impl Node {
         // Retrieve the frame for the window.
         let mut frame = self.frame.unwrap_or_else(|| default_frame(ui.style()));
 
+        let max_w = self.max_width.unwrap_or(ui.spacing().text_edit_width);
+        let max_size = egui::Vec2::new(max_w, ctx.full_rect.height());
+
         // Track changes in selection for the node response.
         let mut selection_changed = false;
 
@@ -263,12 +259,7 @@ impl Node {
             .min_height(min_size.y)
             .default_size(min_size)
             // TODO: Only `max_size` seems to be considered here - `min_size` seems to be ignored.
-            .resize(|mut resize| {
-                if self.auto_sized {
-                    resize = resize.auto_sized();
-                }
-                resize
-            })
+            .resize(|resize| resize.max_size(max_size).min_size(min_size))
             .fixed_pos(pos_screen)
             .collapsible(false)
             .title_bar(false)
