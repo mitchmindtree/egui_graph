@@ -261,6 +261,7 @@ impl Node {
         let mut response = egui::Window::new("")
             .id(self.id)
             .frame(frame)
+            .resizable(false)
             // TODO: These `min_*` and `default_size` methods seem to be totally ignored? Should
             // fix this upstream, but for now we just set min size on the window's `Ui` instead.
             // .min_width(min_size.x)
@@ -273,6 +274,7 @@ impl Node {
             //     } 
             //     resize
             // })
+
             .fixed_pos(pos_screen)
             .collapsible(false)
             .title_bar(false)
@@ -282,6 +284,7 @@ impl Node {
                 let gap = egui::Vec2::splat(win_corner_radius * 2.0);
                 //let min_size = min_size - gap;
                 ui.set_min_size(size);
+
                 // Set the user's content.
                 content(ui);
             })
