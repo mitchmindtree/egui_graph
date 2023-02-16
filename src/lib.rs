@@ -426,7 +426,7 @@ impl Graph {
 
         // Paint some subtle dots to check camera movement.
         let visible_rect = egui::Rect::from_center_size(view.camera.pos, full_rect.size());
-        let dot_step = 80.0; // ui.spacing().interact_size.y;
+        let dot_step = ui.spacing().interact_size.y;
         let vis = ui.style().noninteractive();
         let x_dots =
             (visible_rect.min.x / dot_step) as i32..=(visible_rect.max.x / dot_step) as i32;
@@ -438,17 +438,12 @@ impl Graph {
             for y_dot in y_dots.clone() {
                 let x = x_start + x_dot as f32 * dot_step;
                 let y = y_start + y_dot as f32 * dot_step;
-                //                let r = egui::Rect::from_center_size([x, y].into(), [2.0; 2].into());
-                let _color = vis.bg_stroke.color;
-                let color = egui::Color32::from_gray(19);
+                let r = egui::Rect::from_center_size([x, y].into(), [1.0; 2].into());
+                let color = vis.bg_stroke.color;
                 let stroke = egui::Stroke {
                     width: 0.0,
                     ..vis.bg_stroke
                 };
-                let r = egui::Rect::from_center_size([x, y].into(), [1.0, dot_step].into());
-                ui.painter().rect(r, 0.0, color, stroke);
-
-                let r = egui::Rect::from_center_size([x, y].into(), [dot_step, 1.0].into());
                 ui.painter().rect(r, 0.0, color, stroke);
             }
         }

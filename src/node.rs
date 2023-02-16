@@ -253,8 +253,6 @@ impl Node {
             frame.stroke.color = color;
         }
 
-        let max_w = self.max_width.unwrap_or(ui.spacing().text_edit_width);
-        let max_size = egui::Vec2::new(max_w, ctx.full_rect.height());
         let mut response = egui::Window::new("")
             .id(self.id)
             .frame(frame)
@@ -263,7 +261,7 @@ impl Node {
             // fix this upstream, but for now we just set min size on the window's `Ui` instead.
             .min_width(min_size.x)
             .min_height(min_size.y)
-            .default_size(max_size)
+            .default_size(min_size)
             // TODO: Only `max_size` seems to be considered here - `min_size` seems to be ignored.
             .resize(|mut resize| {
                 if self.auto_sized {
