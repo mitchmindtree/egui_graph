@@ -94,11 +94,11 @@ impl Node {
         self
     }
 
-    /// Optionall specify the max width of the `Node`'s window.
+    /// Optionally specify the max width of the `Node`'s window.
     ///
     /// By default, `ui.spacing().text_edit_width` is used.
-    pub fn max_width(mut self, w: Option<f32>) -> Self {
-        self.max_width = w;
+    pub fn max_width(mut self, w: f32) -> Self {
+        self.max_width = Some(w);
         self
     }
 
@@ -253,28 +253,24 @@ impl Node {
             frame.stroke.color = color;
         }
 
-        //let max_w = self.max_width.unwrap_or(ui.spacing().text_edit_width);
-        //let max_size = egui::Vec2::new(max_w, ctx.full_rect.height());
-        let max_w = self.max_width.unwrap_or(min_size.x);
-        let size = egui::Vec2::new(max_w, min_size.y);
-
+        let max_w = self.max_width.unwrap_or(ui.spacing().text_edit_width);
+        let max_size = egui::Vec2::new(max_w, ctx.full_rect.height());
         let mut response = egui::Window::new("")
             .id(self.id)
             .frame(frame)
             .resizable(false)
             // TODO: These `min_*` and `default_size` methods seem to be totally ignored? Should
             // fix this upstream, but for now we just set min size on the window's `Ui` instead.
-            // .min_width(min_size.x)
-            // .min_height(min_size.y)
-            // .default_size(max_size)
-            // // TODO: Only `max_size` seems to be considered here - `min_size` seems to be ignored.
-            // .resize(|mut resize| { 
-            //     if self.auto_sized {
-            //         resize = resize.auto_sized();
-            //     } 
-            //     resize
-            // })
-
+            .min_width(min_size.x)
+            .min_height(min_size.y)
+            .default_size(max_size)
+            // TODO: Only `max_size` seems to be considered here - `min_size` seems to be ignored.
+            .resize(|mut resize| {
+                if self.auto_sized {
+                    resize = resize.auto_sized();
+                }
+                resize
+            })
             .fixed_pos(pos_screen)
             .collapsible(false)
             .title_bar(false)
@@ -282,9 +278,8 @@ impl Node {
             .show(ui.ctx(), move |ui| {
                 // Ensure the ui is at least large enough to provide space for inputs/outputs.
                 let gap = egui::Vec2::splat(win_corner_radius * 2.0);
-                //let min_size = min_size - gap;
-                ui.set_min_size(size);
-
+                let min_size = min_size - gap;
+                ui.set_min_size(min_size);
                 // Set the user's content.
                 content(ui);
             })
