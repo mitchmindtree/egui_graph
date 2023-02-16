@@ -504,7 +504,7 @@ impl Node {
         }
 
         NodeResponse {
-            response: response,
+            response,
             selection_changed,
             selected,
             removed,
@@ -562,7 +562,7 @@ impl DerefMut for NodeResponse {
 /// The default frame styling used for the `Node`'s `Window`.
 pub fn default_frame(style: &egui::Style) -> egui::Frame {
     let mut frame = egui::Frame::window(style);
-    frame.shadow.extrusion *= 0.0;
+    frame.shadow.extrusion *= 0.25;
     frame.stroke.width = 0.0;
     frame
 }
