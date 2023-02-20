@@ -49,12 +49,9 @@ fn initialize(mut commands: Commands, mut egui: ResMut<EguiContext>) {
     commands.insert_resource(State {
         graph,
         view,
-        interaction: Default::default(),
-        flow: egui::Direction::LeftToRight,
-        node_radius: 3.0,
         node_color: color,
         wire_color: color,
-        wire_width: 1.0,
+        ..State::default()
     });
 }
 
@@ -249,7 +246,6 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         let bezier = egui_graph::bezier::Cubic::from_edge_points(a_out, b_in);
         let dist_per_pt = 5.0;
         let pts: Vec<_> = bezier.flatten(dist_per_pt).collect();
-        let color = ui.visuals().weak_text_color().linear_multiply(0.5);
         let stroke = egui::Stroke {
             width: state.wire_width,
             color: state.wire_color,
