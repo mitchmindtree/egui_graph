@@ -366,10 +366,7 @@ impl Graph {
             let move_camera = match gmem.pressed.as_ref() {
                 None => false,
                 Some(p) => {
-                    let action_ok = match p.action {
-                        PressAction::DragNodes { ref node, .. } if node.is_none() => false,
-                        _ => true,
-                    };
+                    let action_ok = !matches!(p.action, PressAction::DragNodes { ref node, .. } if node.is_none());
                     action_ok && p.origin_pos != ptr_graph
                 }
             };

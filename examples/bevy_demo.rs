@@ -45,11 +45,13 @@ fn initialize(mut commands: Commands, mut egui: ResMut<EguiContext>) {
     view.layout.insert(egui::Id::new(d), [50.0, 0.0].into());
     view.layout.insert(egui::Id::new(e), [200.0, 0.0].into());
 
+    let color = egui::Color32::from_gray(140);
     commands.insert_resource(State {
         graph,
         view,
-        interaction: Default::default(),
-        flow: egui::Direction::LeftToRight,
+        socket_color: color,
+        wire_color: color,
+        ..State::default()
     });
 }
 
@@ -83,6 +85,20 @@ fn update(mut egui_context: ResMut<EguiContext>, mut state: ResMut<State>) {
                         ui.radio_value(&mut state.flow, egui::Direction::RightToLeft, "Left");
                         ui.radio_value(&mut state.flow, egui::Direction::BottomUp, "Up");
                     });
+                    ui.horizontal(|ui| {
+                        ui.label("Wire width:");
+                        ui.add(egui::Slider::new(&mut state.wire_width, 0.5..=10.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Socket radius:");
+                        ui.add(egui::Slider::new(&mut state.socket_radius, 1.0..=10.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Wire color:");
+                        ui.color_edit_button_srgba(&mut state.wire_color);
+                        ui.label("Socket color:");
+                        ui.color_edit_button_srgba(&mut state.socket_color);
+                    });
                 });
         });
 }
@@ -93,6 +109,10 @@ struct State {
     view: egui_graph::View,
     interaction: Interaction,
     flow: egui::Direction,
+    socket_radius: f32,
+    socket_color: egui::Color32,
+    wire_width: f32,
+    wire_color: egui::Color32,
 }
 
 #[derive(Default)]
@@ -139,6 +159,8 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             .inputs(inputs)
             .outputs(outputs)
             .flow(state.flow)
+            .socket_radius(state.socket_radius)
+            .socket_color(state.socket_color)
             .show(graph_view, nctx, ui, |ui| match node.kind {
                 NodeKind::Label => {
                     ui.label(&node.name);
@@ -214,6 +236,10 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
 fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) {
     // Draw the attached edges.
     let indices: Vec<_> = state.graph.edge_indices().collect();
+    let stroke = egui::Stroke {
+        width: state.wire_width,
+        color: state.wire_color,
+    };
     for e in indices {
         let (na, nb) = state.graph.edge_endpoints(e).unwrap();
         let (output, input) = *state.graph.edge_weight(e).unwrap();
@@ -224,9 +250,6 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         let bezier = egui_graph::bezier::Cubic::from_edge_points(a_out, b_in);
         let dist_per_pt = 5.0;
         let pts: Vec<_> = bezier.flatten(dist_per_pt).collect();
-        let color = ui.visuals().weak_text_color().linear_multiply(0.5);
-        let width = 1.0;
-        let stroke = egui::Stroke { width, color };
         ui.painter().add(egui::Shape::line(pts.clone(), stroke));
     }
 
@@ -235,9 +258,6 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         let bezier = edge.bezier_cubic();
         let dist_per_pt = 5.0;
         let pts = bezier.flatten(dist_per_pt).collect();
-        let color = ui.visuals().weak_text_color().linear_multiply(0.5);
-        let width = 1.0;
-        let stroke = egui::Stroke { width, color };
         ui.painter().add(egui::Shape::line(pts, stroke));
     }
 }
@@ -274,6 +294,10 @@ impl Default for State {
             graph: Default::default(),
             view: Default::default(),
             interaction: Default::default(),
+            socket_color: Default::default(),
+            socket_radius: 3.0,
+            wire_width: 1.0,
+            wire_color: Default::default(),
             flow: egui::Direction::LeftToRight,
         }
     }

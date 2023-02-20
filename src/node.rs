@@ -12,6 +12,8 @@ pub struct Node {
     inputs: usize,
     outputs: usize,
     flow: egui::Direction,
+    socket_radius: f32,
+    socket_color: Option<egui::Color32>,
     max_width: Option<f32>,
 }
 
@@ -78,9 +80,11 @@ impl Node {
             id,
             frame: None,
             max_width: None,
+            socket_color: None,
             inputs: 0,
             outputs: 0,
             flow: egui::Direction::LeftToRight,
+            socket_radius: 3.0,
         }
     }
 
@@ -123,6 +127,18 @@ impl Node {
     /// Default direction is `LeftToRight`.
     pub fn flow(mut self, flow: egui::Direction) -> Self {
         self.flow = flow;
+        self
+    }
+
+    /// The color of the input and output sockets.
+    pub fn socket_color(mut self, color: egui::Color32) -> Self {
+        self.socket_color = Some(color);
+        self
+    }
+
+    /// The radius of the input and output sockets.
+    pub fn socket_radius(mut self, radius: f32) -> Self {
+        self.socket_radius = radius;
         self
     }
 
@@ -467,22 +483,24 @@ impl Node {
                 false
             };
 
-            let color = ui.visuals().text_color();
-            let rad = 3.0;
+            let color = self.socket_color.unwrap_or(ui.visuals().text_color());
+            let hl_size = (self.socket_radius + 4.0).max(4.0);
             for ix in 0..self.inputs {
                 if paint_highlight(SocketKind::Input, ix) {
                     ui.painter()
-                        .circle_filled(in_pos, rad * 3.0, color.linear_multiply(0.25));
+                        .circle_filled(in_pos, hl_size, color.linear_multiply(0.25));
                 }
-                ui.painter().circle_filled(in_pos, rad, color);
+                ui.painter()
+                    .circle_filled(in_pos, self.socket_radius, color);
                 in_pos += in_step;
             }
             for ix in 0..self.outputs {
                 if paint_highlight(SocketKind::Output, ix) {
                     ui.painter()
-                        .circle_filled(out_pos, rad * 3.0, color.linear_multiply(0.25));
+                        .circle_filled(out_pos, hl_size, color.linear_multiply(0.25));
                 }
-                ui.painter().circle_filled(out_pos, rad, color);
+                ui.painter()
+                    .circle_filled(out_pos, self.socket_radius, color);
                 out_pos += out_step;
             }
         }
