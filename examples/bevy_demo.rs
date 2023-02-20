@@ -236,6 +236,10 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
 fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) {
     // Draw the attached edges.
     let indices: Vec<_> = state.graph.edge_indices().collect();
+    let stroke = egui::Stroke {
+        width: state.wire_width,
+        color: state.wire_color,
+    };
     for e in indices {
         let (na, nb) = state.graph.edge_endpoints(e).unwrap();
         let (output, input) = *state.graph.edge_weight(e).unwrap();
@@ -246,10 +250,6 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         let bezier = egui_graph::bezier::Cubic::from_edge_points(a_out, b_in);
         let dist_per_pt = 5.0;
         let pts: Vec<_> = bezier.flatten(dist_per_pt).collect();
-        let stroke = egui::Stroke {
-            width: state.wire_width,
-            color: state.wire_color,
-        };
         ui.painter().add(egui::Shape::line(pts.clone(), stroke));
     }
 
@@ -258,9 +258,6 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         let bezier = edge.bezier_cubic();
         let dist_per_pt = 5.0;
         let pts = bezier.flatten(dist_per_pt).collect();
-        let color = ui.visuals().weak_text_color().linear_multiply(0.5);
-        let width = 1.0;
-        let stroke = egui::Stroke { width, color };
         ui.painter().add(egui::Shape::line(pts, stroke));
     }
 }
