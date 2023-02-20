@@ -50,6 +50,8 @@ fn initialize(mut commands: Commands, mut egui: ResMut<EguiContext>) {
         view,
         interaction: Default::default(),
         flow: egui::Direction::LeftToRight,
+        node_radius: 3.0,
+        node_color: egui::Color32::from_gray(140),
     });
 }
 
@@ -83,6 +85,14 @@ fn update(mut egui_context: ResMut<EguiContext>, mut state: ResMut<State>) {
                         ui.radio_value(&mut state.flow, egui::Direction::RightToLeft, "Left");
                         ui.radio_value(&mut state.flow, egui::Direction::BottomUp, "Up");
                     });
+                    ui.horizontal(|ui| {
+                        ui.label("Node radius:");
+                        ui.add(egui::Slider::new(&mut state.node_radius, 0.0..=10.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Node color:");
+                        ui.color_edit_button_srgba(&mut state.node_color);
+                    });
                 });
         });
 }
@@ -93,6 +103,8 @@ struct State {
     view: egui_graph::View,
     interaction: Interaction,
     flow: egui::Direction,
+    node_radius: f32,
+    node_color: egui::Color32,
 }
 
 #[derive(Default)]
@@ -139,6 +151,8 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             .inputs(inputs)
             .outputs(outputs)
             .flow(state.flow)
+            .node_radius(state.node_radius)
+            .node_color(state.node_color)
             .show(graph_view, nctx, ui, |ui| match node.kind {
                 NodeKind::Label => {
                     ui.label(&node.name);
@@ -274,6 +288,8 @@ impl Default for State {
             graph: Default::default(),
             view: Default::default(),
             interaction: Default::default(),
+            node_color: Default::default(),
+            node_radius: 3.0,
             flow: egui::Direction::LeftToRight,
         }
     }
