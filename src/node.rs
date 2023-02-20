@@ -12,8 +12,8 @@ pub struct Node {
     inputs: usize,
     outputs: usize,
     flow: egui::Direction,
-    node_radius: f32,
-    node_color: Option<egui::Color32>,
+    socket_radius: f32,
+    socket_color: Option<egui::Color32>,
     max_width: Option<f32>,
 }
 
@@ -80,11 +80,11 @@ impl Node {
             id,
             frame: None,
             max_width: None,
-            node_color: None,
+            socket_color: None,
             inputs: 0,
             outputs: 0,
             flow: egui::Direction::LeftToRight,
-            node_radius: 3.0,
+            socket_radius: 3.0,
         }
     }
 
@@ -130,15 +130,15 @@ impl Node {
         self
     }
 
-    /// The color of the input and output nodes.
-    pub fn node_color(mut self, color: egui::Color32) -> Self {
-        self.node_color = Some(color);
+    /// The color of the input and output sockets.
+    pub fn socket_color(mut self, color: egui::Color32) -> Self {
+        self.socket_color = Some(color);
         self
     }
 
-    /// The radius of the input and output nodes.
-    pub fn node_radius(mut self, radius: f32) -> Self {
-        self.node_radius = radius;
+    /// The radius of the input and output sockets.
+    pub fn socket_radius(mut self, radius: f32) -> Self {
+        self.socket_radius = radius;
         self
     }
 
@@ -483,14 +483,15 @@ impl Node {
                 false
             };
 
-            let color = self.node_color.unwrap_or(ui.visuals().text_color());
-            let hl_size = (self.node_radius + 4.0).max(4.0);
+            let color = self.socket_color.unwrap_or(ui.visuals().text_color());
+            let hl_size = (self.socket_radius + 4.0).max(4.0);
             for ix in 0..self.inputs {
                 if paint_highlight(SocketKind::Input, ix) {
                     ui.painter()
                         .circle_filled(in_pos, hl_size, color.linear_multiply(0.25));
                 }
-                ui.painter().circle_filled(in_pos, self.node_radius, color);
+                ui.painter()
+                    .circle_filled(in_pos, self.socket_radius, color);
                 in_pos += in_step;
             }
             for ix in 0..self.outputs {
@@ -498,7 +499,8 @@ impl Node {
                     ui.painter()
                         .circle_filled(out_pos, hl_size, color.linear_multiply(0.25));
                 }
-                ui.painter().circle_filled(out_pos, self.node_radius, color);
+                ui.painter()
+                    .circle_filled(out_pos, self.socket_radius, color);
                 out_pos += out_step;
             }
         }

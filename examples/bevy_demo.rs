@@ -49,7 +49,7 @@ fn initialize(mut commands: Commands, mut egui: ResMut<EguiContext>) {
     commands.insert_resource(State {
         graph,
         view,
-        node_color: color,
+        socket_color: color,
         wire_color: color,
         ..State::default()
     });
@@ -90,14 +90,14 @@ fn update(mut egui_context: ResMut<EguiContext>, mut state: ResMut<State>) {
                         ui.add(egui::Slider::new(&mut state.wire_width, 0.5..=10.0));
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Node radius:");
-                        ui.add(egui::Slider::new(&mut state.node_radius, 1.0..=10.0));
+                        ui.label("Socket radius:");
+                        ui.add(egui::Slider::new(&mut state.socket_radius, 1.0..=10.0));
                     });
                     ui.horizontal(|ui| {
                         ui.label("Wire color:");
                         ui.color_edit_button_srgba(&mut state.wire_color);
-                        ui.label("Node color:");
-                        ui.color_edit_button_srgba(&mut state.node_color);
+                        ui.label("Socket color:");
+                        ui.color_edit_button_srgba(&mut state.socket_color);
                     });
                 });
         });
@@ -109,8 +109,8 @@ struct State {
     view: egui_graph::View,
     interaction: Interaction,
     flow: egui::Direction,
-    node_radius: f32,
-    node_color: egui::Color32,
+    socket_radius: f32,
+    socket_color: egui::Color32,
     wire_width: f32,
     wire_color: egui::Color32,
 }
@@ -159,8 +159,8 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             .inputs(inputs)
             .outputs(outputs)
             .flow(state.flow)
-            .node_radius(state.node_radius)
-            .node_color(state.node_color)
+            .socket_radius(state.socket_radius)
+            .socket_color(state.socket_color)
             .show(graph_view, nctx, ui, |ui| match node.kind {
                 NodeKind::Label => {
                     ui.label(&node.name);
@@ -294,8 +294,8 @@ impl Default for State {
             graph: Default::default(),
             view: Default::default(),
             interaction: Default::default(),
-            node_color: Default::default(),
-            node_radius: 3.0,
+            socket_color: Default::default(),
+            socket_radius: 3.0,
             wire_width: 1.0,
             wire_color: Default::default(),
             flow: egui::Direction::LeftToRight,
