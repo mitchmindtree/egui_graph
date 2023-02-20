@@ -45,13 +45,16 @@ fn initialize(mut commands: Commands, mut egui: ResMut<EguiContext>) {
     view.layout.insert(egui::Id::new(d), [50.0, 0.0].into());
     view.layout.insert(egui::Id::new(e), [200.0, 0.0].into());
 
+    let color = egui::Color32::from_gray(140);
     commands.insert_resource(State {
         graph,
         view,
         interaction: Default::default(),
         flow: egui::Direction::LeftToRight,
         node_radius: 3.0,
-        node_color: egui::Color32::from_gray(140),
+        node_color: color,
+        wire_color: color,
+        wire_width: 1.0,
     });
 }
 
@@ -86,10 +89,16 @@ fn update(mut egui_context: ResMut<EguiContext>, mut state: ResMut<State>) {
                         ui.radio_value(&mut state.flow, egui::Direction::BottomUp, "Up");
                     });
                     ui.horizontal(|ui| {
-                        ui.label("Node radius:");
-                        ui.add(egui::Slider::new(&mut state.node_radius, 0.0..=10.0));
+                        ui.label("Wire width:");
+                        ui.add(egui::Slider::new(&mut state.wire_width, 0.5..=10.0));
                     });
                     ui.horizontal(|ui| {
+                        ui.label("Node radius:");
+                        ui.add(egui::Slider::new(&mut state.node_radius, 1.0..=10.0));
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Wire color:");
+                        ui.color_edit_button_srgba(&mut state.wire_color);
                         ui.label("Node color:");
                         ui.color_edit_button_srgba(&mut state.node_color);
                     });
@@ -105,6 +114,8 @@ struct State {
     flow: egui::Direction,
     node_radius: f32,
     node_color: egui::Color32,
+    wire_width: f32,
+    wire_color: egui::Color32,
 }
 
 #[derive(Default)]
@@ -239,8 +250,10 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         let dist_per_pt = 5.0;
         let pts: Vec<_> = bezier.flatten(dist_per_pt).collect();
         let color = ui.visuals().weak_text_color().linear_multiply(0.5);
-        let width = 1.0;
-        let stroke = egui::Stroke { width, color };
+        let stroke = egui::Stroke {
+            width: state.wire_width,
+            color: state.wire_color,
+        };
         ui.painter().add(egui::Shape::line(pts.clone(), stroke));
     }
 
@@ -290,6 +303,8 @@ impl Default for State {
             interaction: Default::default(),
             node_color: Default::default(),
             node_radius: 3.0,
+            wire_width: 1.0,
+            wire_color: Default::default(),
             flow: egui::Direction::LeftToRight,
         }
     }
