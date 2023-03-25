@@ -195,7 +195,7 @@ impl Graph {
         // Check for selection rectangle and node dragging.
         let gmem_arc = memory(ui, self.id);
         let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
-        let pointer = ui.input().pointer.clone();
+        let pointer = ui.input(|i| i.pointer.clone());
         if let Some(ptr_screen) = pointer.interact_pos().or(pointer.hover_pos()) {
             // The location of the pointer over the graph.
             let ptr_graph = view.camera.screen_to_graph(full_rect, ptr_screen);
@@ -338,7 +338,7 @@ impl Graph {
                 // Check if the mouse is over a selected node.
                 let mut over_any = false;
                 let mut over_selected = false;
-                let aim_radius = ui.input().aim_radius();
+                let aim_radius = ui.input(|i| i.aim_radius());
                 for (&n_id, &size) in &gmem.node_sizes {
                     let pos = view.layout.get(&n_id).cloned().unwrap_or(egui::Pos2::ZERO);
                     let r = egui::Rect::from_min_size(pos, size);
@@ -399,12 +399,12 @@ impl Graph {
 
         // Check if we should drag or scroll the camera position.
         if !ptr_in_use && ptr_on_graph {
-            let pointer = &ui.input().pointer;
-
-            // Middle mouse button moves camera.
-            if pointer.is_moving() && pointer.button_down(egui::PointerButton::Middle) {
-                view.camera.pos -= pointer.delta();
-            }
+            ui.input(|i| {
+                // Middle mouse button moves camera.
+                if i.pointer.is_moving() && i.pointer.button_down(egui::PointerButton::Middle) {
+                    view.camera.pos -= pointer.delta();
+                }
+            });
         }
 
         // Paint the background rect.
@@ -732,10 +732,10 @@ pub fn id(id_src: impl Hash) -> egui::Id {
 
 /// Short-hand for retrieving access to the graph's temporary memory from the `Ui`.
 fn memory(ui: &egui::Ui, graph_id: egui::Id) -> Arc<Mutex<GraphTempMemory>> {
-    ui.ctx()
-        .data()
-        .get_temp_mut_or_default::<Arc<Mutex<GraphTempMemory>>>(graph_id)
-        .clone()
+    ui.ctx().data_mut(|d| {
+        d.get_temp_mut_or_default::<Arc<Mutex<GraphTempMemory>>>(graph_id)
+            .clone()
+    })
 }
 
 fn graph_to_screen(cam_pos: egui::Pos2, graph_rect: egui::Rect, pos: egui::Pos2) -> egui::Pos2 {

@@ -174,10 +174,10 @@ impl Node {
             // Otherwise, add the node to the top-left.
             let mut pos = camera.pos - ctx.full_rect.center() + ui.spacing().item_spacing;
             if ui.rect_contains_pointer(ctx.full_rect) {
-                if let Some(ptr) = ui.input().pointer.hover_pos() {
+                ui.input(|i| i.pointer.hover_pos()).map(|ptr| {
                     pos = ptr - ctx.full_rect.center() + camera.pos.to_vec2()
                         - ui.spacing().interact_size * 0.5;
-                }
+                });
             }
             egui::Pos2::new(pos.x, pos.y)
         });
@@ -244,7 +244,7 @@ impl Node {
                     if gmem.selection.nodes.insert(self.id) {
                         selection_changed = true;
                     }
-                } else if !ui.input().modifiers.ctrl {
+                } else if !ui.input(|i| i.modifiers.ctrl) {
                     if gmem.selection.nodes.remove(&self.id) {
                         selection_changed = true;
                     }
@@ -299,10 +299,10 @@ impl Node {
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
             gmem.node_sizes.insert(self.id, response.rect.size());
 
-            let ctrl_down = ui.input().modifiers.ctrl;
+            let ctrl_down = ui.input(|i| i.modifiers.ctrl);
 
             // If the window is pressed, select the node.
-            let pointer = &ui.input().pointer;
+            let pointer = &ui.input(|i| i.pointer.clone());
             if response.is_pointer_button_down_on() && primary_pressed(pointer) {
                 // If ctrl is down, check for deselection.
                 if ctrl_down && gmem.selection.nodes.contains(&self.id) {
@@ -351,7 +351,7 @@ impl Node {
                 if let Some(c) = gmem.closest_socket {
                     if r.kind == c.kind && self.id == r.node {
                         edge_event = Some(EdgeEvent::Cancelled);
-                    } else if self.id == c.node && primary_released(&ui.input()) {
+                    } else if self.id == c.node && primary_released(&ui.input(|i| i.clone())) {
                         let kind = c.kind;
                         let index = c.index;
                         edge_event = Some(EdgeEvent::Ended { kind, index });
@@ -506,7 +506,7 @@ impl Node {
         }
 
         // If the delete key was pressed and the node is selected, remove it.
-        let removed = if selected && ui.input().key_pressed(egui::Key::Delete) {
+        let removed = if selected && ui.input(|i| i.key_pressed(egui::Key::Delete)) {
             // Remove ourselves from the selection.
             let gmem_arc = crate::memory(ui, ctx.graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
