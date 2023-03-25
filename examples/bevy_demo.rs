@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContext, EguiPlugin};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use egui_graph::node::{EdgeEvent, SocketKind};
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::visit::EdgeRef;
@@ -15,7 +15,7 @@ fn main() {
         .run();
 }
 
-fn initialize(mut commands: Commands, mut egui: ResMut<EguiContext>) {
+fn initialize(mut commands: Commands, mut egui: EguiContexts) {
     egui.ctx_mut().set_fonts(egui::FontDefinitions::default());
     egui.ctx_mut().set_style(style());
 
@@ -55,7 +55,7 @@ fn initialize(mut commands: Commands, mut egui: ResMut<EguiContext>) {
     });
 }
 
-fn update(mut egui_context: ResMut<EguiContext>, mut state: ResMut<State>) {
+fn update(mut egui_context: EguiContexts, mut state: ResMut<State>) {
     egui::containers::CentralPanel::default()
         .frame(egui::Frame::default())
         .show(&egui_context.ctx_mut(), |ui| {
