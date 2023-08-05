@@ -8,10 +8,9 @@ use std::collections::HashSet;
 fn main() {
     App::new()
         .init_resource::<State>()
-        .add_plugins(DefaultPlugins)
-        .add_plugin(EguiPlugin)
-        .add_startup_system(initialize)
-        .add_system(update)
+        .add_plugins((DefaultPlugins,EguiPlugin))
+        .add_systems(Startup, initialize)
+        .add_systems(Update, update)
         .run();
 }
 
