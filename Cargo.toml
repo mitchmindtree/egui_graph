@@ -1,6 +1,6 @@
 [package]
 name = "egui_graph"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "A general-purpose node graph widget for egui."
 license = "MIT"
@@ -19,5 +19,5 @@ bevy_egui = "0.21.0"
 petgraph = "0.6"
 
 [features]
-default = []
+default = ["serde"]
 serde = ["egui/serde", "dep:serde"]
