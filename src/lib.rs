@@ -93,6 +93,7 @@ struct PressedNode {
 // TODO: Consider storing this in graph widget "memory"?
 // The thing is, it might be nice to let the user modify these externally.
 #[derive(Default)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct View {
     pub camera: Camera,
     pub layout: Layout,
@@ -103,6 +104,7 @@ pub type Layout = HashMap<egui::Id, egui::Pos2>;
 
 /// A top-down camera-like view over the area of the graph.
 #[derive(Default)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Camera {
     /// Location of the camera relative to the center of the graph.
     pub pos: egui::Pos2,
