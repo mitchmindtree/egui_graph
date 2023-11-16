@@ -505,8 +505,10 @@ impl Node {
             }
         }
 
-        // If the delete key was pressed and the node is selected, remove it.
-        let removed = if selected && ui.input(|i| i.key_pressed(egui::Key::Delete)) {
+        // If the delete or backspace key was pressed and the node is selected, remove it.
+        let removed = if selected
+            && ui.input(|i| i.key_pressed(egui::Key::Delete) | i.key_pressed(egui::Key::Backspace))
+        {
             // Remove ourselves from the selection.
             let gmem_arc = crate::memory(ui, ctx.graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
