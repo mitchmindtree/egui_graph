@@ -280,7 +280,7 @@ impl Node {
             .collapsible(false)
             .title_bar(false)
             .auto_sized()
-            .drag_bounds(egui::Rect::EVERYTHING)
+            .constraint_to(egui::Rect::EVERYTHING)
             .show(ui.ctx(), move |ui| {
                 // Ensure the ui is at least large enough to provide space for inputs/outputs.
                 let gap = egui::Vec2::splat(win_corner_radius * 2.0);

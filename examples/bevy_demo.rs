@@ -118,6 +118,8 @@ struct State {
 struct Interaction {
     selection: Selection,
     edge_in_progress: Option<(NodeIndex, SocketKind, usize)>,
+    dragging: bool,
+    start_drag_pos: Option<egui::Pos2>,
 }
 
 #[derive(Default)]
@@ -239,6 +241,16 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         width: state.wire_width,
         color: state.wire_color,
     };
+
+    let mouse_pos = ui.input(|i| i.pointer.interact_pos().unwrap_or_default());
+    if ui.input(|i| i.pointer.any_pressed()) {
+        if state.interaction.dragging == false {
+            state.interaction.selection.edges.clear();
+        }
+        state.interaction.dragging = true;
+        state.interaction.start_drag_pos = Some(mouse_pos);
+    }
+
     for e in indices {
         let (na, nb) = state.graph.edge_endpoints(e).unwrap();
         let (output, input) = *state.graph.edge_weight(e).unwrap();
@@ -249,7 +261,39 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         let bezier = egui_graph::bezier::Cubic::from_edge_points(a_out, b_in);
         let dist_per_pt = 5.0;
         let pts: Vec<_> = bezier.flatten(dist_per_pt).collect();
-        ui.painter().add(egui::Shape::line(pts.clone(), stroke));
+
+        // Check if mouse is over the bezier curve
+        let closest_point = bezier.closest_point(dist_per_pt, egui::Pos2::from(mouse_pos));
+        let distance_to_mouse = closest_point.distance(egui::Pos2::from(mouse_pos));
+        let selection_threshold = state.wire_width * 8.0; // Threshold for selecting the edge
+        if distance_to_mouse < selection_threshold {
+            if state.interaction.dragging {
+                // Add to the selection if dragging
+                state.interaction.selection.edges.insert(e);
+            } else if ui.input(|i| i.pointer.any_released()) {
+                // Add to the selection if it's a click
+                state.interaction.selection.edges.clear();
+                state.interaction.selection.edges.insert(e);
+            }
+        }
+
+        let wire_stroke = if state.interaction.selection.edges.contains(&e) {
+            egui::Stroke {
+                width: state.wire_width * 4.0,
+                color: state.wire_color.linear_multiply(1.5),
+            }
+        } else {
+            stroke
+        };
+
+        // Draw the bezier curve
+        ui.painter()
+            .add(egui::Shape::line(pts.clone(), wire_stroke));
+    }
+
+    if ui.input(|i| i.pointer.any_released()) {
+        state.interaction.dragging = false;
+        state.interaction.start_drag_pos = None;
     }
 
     // Draw the in-progress edge if there is one.
@@ -258,6 +302,14 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         let dist_per_pt = 5.0;
         let pts = bezier.flatten(dist_per_pt).collect();
         ui.painter().add(egui::Shape::line(pts, stroke));
+    }
+
+    // Remove selected edges if delete/backspace is pressed
+    if ui.input(|i| i.key_pressed(egui::Key::Delete) | i.key_pressed(egui::Key::Backspace)) {
+        state.interaction.selection.edges.iter().for_each(|e| {
+            state.graph.remove_edge(*e);
+        });
+        state.interaction.selection.nodes.clear();
     }
 }
 
