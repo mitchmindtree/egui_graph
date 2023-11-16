@@ -199,7 +199,7 @@ impl Node {
         let min_socket_gap = min_interact_len + min_item_spacing;
         let win_corner_radius = ui.visuals().window_rounding.ne;
         let socket_padding = win_corner_radius + min_interact_len * 0.5;
-        let min_len = socket_padding * 2.0 + (max_sockets - 1) as f32 * min_socket_gap;
+        let min_len = (max_sockets.max(1) - 1) as f32 * min_socket_gap + socket_padding * 2.0;
         if max_sockets > 1 {
             match self.flow {
                 egui::Direction::LeftToRight | egui::Direction::RightToLeft => {
