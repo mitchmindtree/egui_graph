@@ -118,8 +118,6 @@ struct State {
 struct Interaction {
     selection: Selection,
     edge_in_progress: Option<(NodeIndex, SocketKind, usize)>,
-    dragging: bool,
-    start_drag_pos: Option<egui::Pos2>,
 }
 
 #[derive(Default)]
@@ -243,13 +241,10 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
     };
 
     let mouse_pos = ui.input(|i| i.pointer.interact_pos().unwrap_or_default());
-    if ui.input(|i| i.pointer.any_pressed()) {
-        if state.interaction.dragging == false {
-            state.interaction.selection.edges.clear();
-        }
-        state.interaction.dragging = true;
-        state.interaction.start_drag_pos = Some(mouse_pos);
-    }
+    let click = ui.input(|i| i.pointer.any_released());
+    let shift_held = ui.input(|i| i.modifiers.shift);
+    let mut clicked_on_edge = false;
+    let selection_threshold = state.wire_width * 8.0; // Threshold for selecting the edge
 
     for e in indices {
         let (na, nb) = state.graph.edge_endpoints(e).unwrap();
@@ -265,16 +260,14 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         // Check if mouse is over the bezier curve
         let closest_point = bezier.closest_point(dist_per_pt, egui::Pos2::from(mouse_pos));
         let distance_to_mouse = closest_point.distance(egui::Pos2::from(mouse_pos));
-        let selection_threshold = state.wire_width * 8.0; // Threshold for selecting the edge
-        if distance_to_mouse < selection_threshold {
-            if state.interaction.dragging {
-                // Add to the selection if dragging
-                state.interaction.selection.edges.insert(e);
-            } else if ui.input(|i| i.pointer.any_released()) {
-                // Add to the selection if it's a click
+        if distance_to_mouse < selection_threshold && click {
+            clicked_on_edge = true;
+            // If Shift is not held, clear previous selection
+            if !shift_held {
                 state.interaction.selection.edges.clear();
-                state.interaction.selection.edges.insert(e);
             }
+            // Add the clicked edge to the selection
+            state.interaction.selection.edges.insert(e);
         }
 
         let wire_stroke = if state.interaction.selection.edges.contains(&e) {
@@ -291,9 +284,9 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
             .add(egui::Shape::line(pts.clone(), wire_stroke));
     }
 
-    if ui.input(|i| i.pointer.any_released()) {
-        state.interaction.dragging = false;
-        state.interaction.start_drag_pos = None;
+    if click && !clicked_on_edge {
+        // Click occurred on the canvas, clear the selection
+        state.interaction.selection.edges.clear();
     }
 
     // Draw the in-progress edge if there is one.
