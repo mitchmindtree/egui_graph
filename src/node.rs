@@ -199,7 +199,7 @@ impl Node {
         let min_socket_gap = min_interact_len + min_item_spacing;
         let win_corner_radius = ui.visuals().window_rounding.ne;
         let socket_padding = win_corner_radius + min_interact_len * 0.5;
-        let min_len = socket_padding * 2.0 + (max_sockets - 1) as f32 * min_socket_gap;
+        let min_len = (max_sockets.max(1) - 1) as f32 * min_socket_gap + socket_padding * 2.0;
         if max_sockets > 1 {
             match self.flow {
                 egui::Direction::LeftToRight | egui::Direction::RightToLeft => {
@@ -280,7 +280,7 @@ impl Node {
             .collapsible(false)
             .title_bar(false)
             .auto_sized()
-            .drag_bounds(egui::Rect::EVERYTHING)
+            .constraint_to(egui::Rect::EVERYTHING)
             .show(ui.ctx(), move |ui| {
                 // Ensure the ui is at least large enough to provide space for inputs/outputs.
                 let gap = egui::Vec2::splat(win_corner_radius * 2.0);
@@ -505,8 +505,10 @@ impl Node {
             }
         }
 
-        // If the delete key was pressed and the node is selected, remove it.
-        let removed = if selected && ui.input(|i| i.key_pressed(egui::Key::Delete)) {
+        // If the delete or backspace key was pressed and the node is selected, remove it.
+        let removed = if selected
+            && ui.input(|i| i.key_pressed(egui::Key::Delete) | i.key_pressed(egui::Key::Backspace))
+        {
             // Remove ourselves from the selection.
             let gmem_arc = crate::memory(ui, ctx.graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
