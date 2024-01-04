@@ -7,7 +7,6 @@ use std::collections::HashSet;
 
 fn main() {
     App::new()
-        .init_resource::<State>()
         .add_plugins((DefaultPlugins, EguiPlugin))
         .add_systems(Startup, initialize)
         .add_systems(Update, update)
@@ -15,8 +14,9 @@ fn main() {
 }
 
 fn initialize(mut commands: Commands, mut egui: EguiContexts) {
-    egui.ctx_mut().set_fonts(egui::FontDefinitions::default());
-    egui.ctx_mut().set_style(style());
+    let ctx = egui.ctx_mut();
+    ctx.set_fonts(egui::FontDefinitions::default());
+    ctx.set_style(style());
 
     // The graph we want to inspect/edit.
     let mut graph = Graph::new();
@@ -33,72 +33,106 @@ fn initialize(mut commands: Commands, mut egui: EguiContexts) {
     graph.add_edge(c, d, (0, 0));
     graph.add_edge(d, e, (0, 0));
 
-    // Describes the camera position and layout of the nodes.
-    let mut view = egui_graph::View::default();
-
-    // We don't have any fancy automatic layout yet, so set some reasonable initial positions.
-    view.layout.insert(egui::Id::new(a), [-400.0, 0.0].into());
-    view.layout.insert(egui::Id::new(b), [-150.0, 100.0].into());
-    view.layout
-        .insert(egui::Id::new(c), [-200.0, -100.0].into());
-    view.layout.insert(egui::Id::new(d), [50.0, 0.0].into());
-    view.layout.insert(egui::Id::new(e), [200.0, 0.0].into());
-
-    let color = egui::Color32::from_gray(140);
-    commands.insert_resource(State {
+    let state = State {
         graph,
-        view,
-        socket_color: color,
-        wire_color: color,
-        ..State::default()
-    });
+        view: Default::default(),
+        interaction: Default::default(),
+        socket_color: ctx.style().visuals.weak_text_color(),
+        socket_radius: 3.0,
+        wire_width: 1.0,
+        wire_color: ctx.style().visuals.weak_text_color(),
+        flow: egui::Direction::TopDown,
+        auto_layout: true,
+    };
+
+    commands.insert_resource(state);
 }
 
-fn update(mut egui_context: EguiContexts, mut state: ResMut<State>) {
+fn layout(graph: &Graph, flow: egui::Direction, ctx: &egui::Context) -> egui_graph::Layout {
+    ctx.memory(|m| {
+        let nodes = graph.node_indices().map(|n| {
+            let id = egui::Id::new(n);
+            let size = m
+                .area_rect(id)
+                .map(|a| a.size())
+                .unwrap_or([200.0, 50.0].into());
+            (id, size)
+        });
+        let edges = graph
+            .edge_indices()
+            .filter_map(|e| graph.edge_endpoints(e))
+            .map(|(a, b)| (egui::Id::new(a), egui::Id::new(b)));
+        egui_graph::layout(nodes, edges, flow)
+    })
+}
+
+fn update(mut egui: EguiContexts, mut state: ResMut<State>) {
+    let ctx = egui.ctx_mut();
+    gui(ctx, &mut state);
+    if state.auto_layout {
+        state.view.layout = layout(&state.graph, state.flow, ctx);
+    }
+}
+
+fn gui(ctx: &egui::Context, state: &mut State) {
     egui::containers::CentralPanel::default()
         .frame(egui::Frame::default())
-        .show(&egui_context.ctx_mut(), |ui| {
-            egui_graph::Graph::new("Demo Graph")
-                .show(&mut state.view, ui)
-                .nodes(|nctx, ui| nodes(nctx, ui, &mut state))
-                .edges(|ectx, ui| edges(ectx, ui, &mut state));
+        .show(ctx, |ui| {
+            graph_config(ui, state);
+            graph(ui, state);
+        });
+}
 
-            // Overlay some configuration for the graph.
-            let mut frame = egui::Frame::window(ui.style());
-            frame.shadow.extrusion = 0.0;
-            egui::Window::new("Graph Config")
-                .frame(frame)
-                .anchor(
-                    egui::Align2::LEFT_TOP,
-                    ui.spacing().window_margin.left_top(),
-                )
-                .collapsible(false)
-                .title_bar(false)
-                .auto_sized()
-                .show(ui.ctx(), |ui| {
-                    ui.label("GRAPH CONFIG");
-                    ui.horizontal(|ui| {
-                        ui.label("Flow:");
-                        ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");
-                        ui.radio_value(&mut state.flow, egui::Direction::TopDown, "Down");
-                        ui.radio_value(&mut state.flow, egui::Direction::RightToLeft, "Left");
-                        ui.radio_value(&mut state.flow, egui::Direction::BottomUp, "Up");
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Wire width:");
-                        ui.add(egui::Slider::new(&mut state.wire_width, 0.5..=10.0));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Socket radius:");
-                        ui.add(egui::Slider::new(&mut state.socket_radius, 1.0..=10.0));
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Wire color:");
-                        ui.color_edit_button_srgba(&mut state.wire_color);
-                        ui.label("Socket color:");
-                        ui.color_edit_button_srgba(&mut state.socket_color);
-                    });
+fn graph(ui: &mut egui::Ui, state: &mut State) {
+    egui_graph::Graph::new("Demo Graph")
+        .show(&mut state.view, ui)
+        .nodes(|nctx, ui| nodes(nctx, ui, state))
+        .edges(|ectx, ui| edges(ectx, ui, state));
+}
+
+fn graph_config(ui: &mut egui::Ui, state: &mut State) {
+    let mut frame = egui::Frame::window(ui.style());
+    frame.shadow.extrusion = 0.0;
+    egui::Window::new("Graph Config")
+        .frame(frame)
+        .anchor(
+            egui::Align2::LEFT_TOP,
+            ui.spacing().window_margin.left_top(),
+        )
+        .collapsible(false)
+        .title_bar(false)
+        .auto_sized()
+        .show(ui.ctx(), |ui| {
+            ui.label("GRAPH CONFIG");
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut state.auto_layout, "Automatic Layout");
+                ui.separator();
+                ui.scope(|ui| {
+                    ui.set_enabled(!state.auto_layout);
+                    if ui.button("Layout Once").clicked() {
+                        state.view.layout = layout(&state.graph, state.flow, ui.ctx());
+                    }
                 });
+            });
+            ui.horizontal(|ui| {
+                ui.label("Flow:");
+                ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");
+                ui.radio_value(&mut state.flow, egui::Direction::TopDown, "Down");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Wire width:");
+                ui.add(egui::Slider::new(&mut state.wire_width, 0.5..=10.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Socket radius:");
+                ui.add(egui::Slider::new(&mut state.socket_radius, 1.0..=10.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Wire color:");
+                ui.color_edit_button_srgba(&mut state.wire_color);
+                ui.label("Socket color:");
+                ui.color_edit_button_srgba(&mut state.socket_color);
+            });
         });
 }
 
@@ -112,6 +146,7 @@ struct State {
     socket_color: egui::Color32,
     wire_width: f32,
     wire_color: egui::Color32,
+    auto_layout: bool,
 }
 
 #[derive(Default)]
@@ -320,7 +355,6 @@ fn style() -> egui::Style {
         interact_size: egui::Vec2::new(56.0, 24.0),
         indent: 10.0,
         icon_width: 20.0,
-        icon_spacing: 1.0,
         ..style.spacing
     };
     style.visuals.widgets.inactive.fg_stroke.color = egui::Color32::WHITE;
@@ -330,19 +364,4 @@ fn style() -> egui::Style {
     style.visuals.widgets.noninteractive.bg_stroke.color = egui::Color32::BLACK;
     style.visuals.widgets.noninteractive.fg_stroke.color = egui::Color32::WHITE;
     style
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            graph: Default::default(),
-            view: Default::default(),
-            interaction: Default::default(),
-            socket_color: Default::default(),
-            socket_radius: 3.0,
-            wire_width: 1.0,
-            wire_color: Default::default(),
-            flow: egui::Direction::LeftToRight,
-        }
-    }
 }

@@ -2,7 +2,12 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "layout")]
+pub use layout::layout;
+
 pub mod bezier;
+#[cfg(feature = "layout")]
+pub mod layout;
 pub mod node;
 
 /// The main interface for the `Graph` widget.
