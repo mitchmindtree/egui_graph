@@ -1,142 +1,20 @@
-use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use eframe::egui;
 use egui_graph::node::{EdgeEvent, SocketKind};
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::visit::EdgeRef;
 use std::collections::HashSet;
 
-fn main() {
-    App::new()
-        .add_plugins((DefaultPlugins, EguiPlugin))
-        .add_systems(Startup, initialize)
-        .add_systems(Update, update)
-        .run();
+fn main() -> Result<(), eframe::Error> {
+    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    let options = eframe::NativeOptions::default();
+    let name = "`egui_graph` demo";
+    eframe::run_native(name, options, Box::new(|cc| Box::new(App::new(cc))))
 }
 
-fn initialize(mut commands: Commands, mut egui: EguiContexts) {
-    let ctx = egui.ctx_mut();
-    ctx.set_fonts(egui::FontDefinitions::default());
-    ctx.set_style(style());
-
-    // The graph we want to inspect/edit.
-    let mut graph = Graph::new();
-    let a = graph.add_node(node("Foo", NodeKind::Label));
-    let b = graph.add_node(node("Bar", NodeKind::Button));
-    let c = graph.add_node(node("Baz", NodeKind::Slider(0.5)));
-    let d = graph.add_node(node("Qux", NodeKind::DragValue(20.0)));
-    let comment = "Nodes are a thin wrapper around the `egui::Window`, \
-        allowing you to set arbitrary widgets.";
-    let e = graph.add_node(node("Fiz", NodeKind::Comment(comment.to_string())));
-    graph.add_edge(a, c, (0, 0));
-    graph.add_edge(a, d, (1, 1));
-    graph.add_edge(b, d, (0, 2));
-    graph.add_edge(c, d, (0, 0));
-    graph.add_edge(d, e, (0, 0));
-
-    let state = State {
-        graph,
-        view: Default::default(),
-        interaction: Default::default(),
-        socket_color: ctx.style().visuals.weak_text_color(),
-        socket_radius: 3.0,
-        wire_width: 1.0,
-        wire_color: ctx.style().visuals.weak_text_color(),
-        flow: egui::Direction::TopDown,
-        auto_layout: true,
-    };
-
-    commands.insert_resource(state);
+struct App {
+    state: State,
 }
 
-fn layout(graph: &Graph, flow: egui::Direction, ctx: &egui::Context) -> egui_graph::Layout {
-    ctx.memory(|m| {
-        let nodes = graph.node_indices().map(|n| {
-            let id = egui::Id::new(n);
-            let size = m
-                .area_rect(id)
-                .map(|a| a.size())
-                .unwrap_or([200.0, 50.0].into());
-            (id, size)
-        });
-        let edges = graph
-            .edge_indices()
-            .filter_map(|e| graph.edge_endpoints(e))
-            .map(|(a, b)| (egui::Id::new(a), egui::Id::new(b)));
-        egui_graph::layout(nodes, edges, flow)
-    })
-}
-
-fn update(mut egui: EguiContexts, mut state: ResMut<State>) {
-    let ctx = egui.ctx_mut();
-    gui(ctx, &mut state);
-    if state.auto_layout {
-        state.view.layout = layout(&state.graph, state.flow, ctx);
-    }
-}
-
-fn gui(ctx: &egui::Context, state: &mut State) {
-    egui::containers::CentralPanel::default()
-        .frame(egui::Frame::default())
-        .show(ctx, |ui| {
-            graph_config(ui, state);
-            graph(ui, state);
-        });
-}
-
-fn graph(ui: &mut egui::Ui, state: &mut State) {
-    egui_graph::Graph::new("Demo Graph")
-        .show(&mut state.view, ui)
-        .nodes(|nctx, ui| nodes(nctx, ui, state))
-        .edges(|ectx, ui| edges(ectx, ui, state));
-}
-
-fn graph_config(ui: &mut egui::Ui, state: &mut State) {
-    let mut frame = egui::Frame::window(ui.style());
-    frame.shadow.extrusion = 0.0;
-    egui::Window::new("Graph Config")
-        .frame(frame)
-        .anchor(
-            egui::Align2::LEFT_TOP,
-            ui.spacing().window_margin.left_top(),
-        )
-        .collapsible(false)
-        .title_bar(false)
-        .auto_sized()
-        .show(ui.ctx(), |ui| {
-            ui.label("GRAPH CONFIG");
-            ui.horizontal(|ui| {
-                ui.checkbox(&mut state.auto_layout, "Automatic Layout");
-                ui.separator();
-                ui.scope(|ui| {
-                    ui.set_enabled(!state.auto_layout);
-                    if ui.button("Layout Once").clicked() {
-                        state.view.layout = layout(&state.graph, state.flow, ui.ctx());
-                    }
-                });
-            });
-            ui.horizontal(|ui| {
-                ui.label("Flow:");
-                ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");
-                ui.radio_value(&mut state.flow, egui::Direction::TopDown, "Down");
-            });
-            ui.horizontal(|ui| {
-                ui.label("Wire width:");
-                ui.add(egui::Slider::new(&mut state.wire_width, 0.5..=10.0));
-            });
-            ui.horizontal(|ui| {
-                ui.label("Socket radius:");
-                ui.add(egui::Slider::new(&mut state.socket_radius, 1.0..=10.0));
-            });
-            ui.horizontal(|ui| {
-                ui.label("Wire color:");
-                ui.color_edit_button_srgba(&mut state.wire_color);
-                ui.label("Socket color:");
-                ui.color_edit_button_srgba(&mut state.socket_color);
-            });
-        });
-}
-
-#[derive(Resource)]
 struct State {
     graph: Graph,
     view: egui_graph::View,
@@ -174,6 +52,92 @@ enum NodeKind {
     Slider(f32),
     DragValue(f32),
     Comment(String),
+}
+
+impl App {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let ctx = &cc.egui_ctx;
+        ctx.set_fonts(egui::FontDefinitions::default());
+        let graph = new_graph();
+        let state = State {
+            graph,
+            view: Default::default(),
+            interaction: Default::default(),
+            socket_color: ctx.style().visuals.weak_text_color(),
+            socket_radius: 3.0,
+            wire_width: 1.0,
+            wire_color: ctx.style().visuals.weak_text_color(),
+            flow: egui::Direction::TopDown,
+            auto_layout: true,
+        };
+        App { state }
+    }
+}
+
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        gui(ctx, &mut self.state);
+        if self.state.auto_layout {
+            self.state.view.layout = layout(&self.state.graph, self.state.flow, ctx);
+        }
+    }
+}
+
+fn new_graph() -> Graph {
+    // The graph we want to inspect/edit.
+    let mut graph = Graph::new();
+    let a = graph.add_node(node("Foo", NodeKind::Label));
+    let b = graph.add_node(node("Bar", NodeKind::Button));
+    let c = graph.add_node(node("Baz", NodeKind::Slider(0.5)));
+    let d = graph.add_node(node("Qux", NodeKind::DragValue(20.0)));
+    let comment = "Nodes are a thin wrapper around the `egui::Window`, \
+        allowing you to set arbitrary widgets.";
+    let e = graph.add_node(node("Fiz", NodeKind::Comment(comment.to_string())));
+    graph.add_edge(a, c, (0, 0));
+    graph.add_edge(a, d, (1, 1));
+    graph.add_edge(b, d, (0, 2));
+    graph.add_edge(c, d, (0, 0));
+    graph.add_edge(d, e, (0, 0));
+    graph
+}
+
+fn node(name: impl ToString, kind: NodeKind) -> Node {
+    let name = name.to_string();
+    Node { name, kind }
+}
+
+fn layout(graph: &Graph, flow: egui::Direction, ctx: &egui::Context) -> egui_graph::Layout {
+    ctx.memory(|m| {
+        let nodes = graph.node_indices().map(|n| {
+            let id = egui::Id::new(n);
+            let size = m
+                .area_rect(id)
+                .map(|a| a.size())
+                .unwrap_or([200.0, 50.0].into());
+            (id, size)
+        });
+        let edges = graph
+            .edge_indices()
+            .filter_map(|e| graph.edge_endpoints(e))
+            .map(|(a, b)| (egui::Id::new(a), egui::Id::new(b)));
+        egui_graph::layout(nodes, edges, flow)
+    })
+}
+
+fn gui(ctx: &egui::Context, state: &mut State) {
+    egui::containers::CentralPanel::default()
+        .frame(egui::Frame::default())
+        .show(ctx, |ui| {
+            graph_config(ui, state);
+            graph(ui, state);
+        });
+}
+
+fn graph(ui: &mut egui::Ui, state: &mut State) {
+    egui_graph::Graph::new("Demo Graph")
+        .show(&mut state.view, ui)
+        .nodes(|nctx, ui| nodes(nctx, ui, state))
+        .edges(|ectx, ui| edges(ectx, ui, state));
 }
 
 fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) {
@@ -341,27 +305,48 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
     }
 }
 
-fn node(name: impl ToString, kind: NodeKind) -> Node {
-    let name = name.to_string();
-    Node { name, kind }
-}
-
-// TODO: Remove this. Just use defaults for example.
-fn style() -> egui::Style {
-    let mut style = egui::Style::default();
-    style.spacing = egui::style::Spacing {
-        item_spacing: egui::Vec2::splat(8.0),
-        button_padding: egui::Vec2::new(4.0, 2.0),
-        interact_size: egui::Vec2::new(56.0, 24.0),
-        indent: 10.0,
-        icon_width: 20.0,
-        ..style.spacing
-    };
-    style.visuals.widgets.inactive.fg_stroke.color = egui::Color32::WHITE;
-    style.visuals.extreme_bg_color = egui::Color32::from_gray(12);
-    style.visuals.faint_bg_color = egui::Color32::from_gray(24);
-    style.visuals.widgets.noninteractive.bg_fill = egui::Color32::from_gray(36);
-    style.visuals.widgets.noninteractive.bg_stroke.color = egui::Color32::BLACK;
-    style.visuals.widgets.noninteractive.fg_stroke.color = egui::Color32::WHITE;
-    style
+fn graph_config(ui: &mut egui::Ui, state: &mut State) {
+    let mut frame = egui::Frame::window(ui.style());
+    frame.shadow.extrusion = 0.0;
+    egui::Window::new("Graph Config")
+        .frame(frame)
+        .anchor(
+            egui::Align2::LEFT_TOP,
+            ui.spacing().window_margin.left_top(),
+        )
+        .collapsible(false)
+        .title_bar(false)
+        .auto_sized()
+        .show(ui.ctx(), |ui| {
+            ui.label("GRAPH CONFIG");
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut state.auto_layout, "Automatic Layout");
+                ui.separator();
+                ui.scope(|ui| {
+                    ui.set_enabled(!state.auto_layout);
+                    if ui.button("Layout Once").clicked() {
+                        state.view.layout = layout(&state.graph, state.flow, ui.ctx());
+                    }
+                });
+            });
+            ui.horizontal(|ui| {
+                ui.label("Flow:");
+                ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");
+                ui.radio_value(&mut state.flow, egui::Direction::TopDown, "Down");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Wire width:");
+                ui.add(egui::Slider::new(&mut state.wire_width, 0.5..=10.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Socket radius:");
+                ui.add(egui::Slider::new(&mut state.socket_radius, 1.0..=10.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Wire color:");
+                ui.color_edit_button_srgba(&mut state.wire_color);
+                ui.label("Socket color:");
+                ui.color_edit_button_srgba(&mut state.socket_color);
+            });
+        });
 }
