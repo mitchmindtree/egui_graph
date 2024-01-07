@@ -421,7 +421,7 @@ impl Graph {
                 width: 0.0,
                 ..vis.bg_stroke
             };
-            let fill = vis.bg_fill.linear_multiply(0.5);
+            let fill = vis.bg_fill;
             ui.painter().rect(full_rect, 0.0, fill, stroke);
         }
 

@@ -15,6 +15,7 @@ pub struct Node {
     socket_radius: f32,
     socket_color: Option<egui::Color32>,
     max_width: Option<f32>,
+    animation_time: f32,
 }
 
 /// Describes either an input or output.
@@ -85,6 +86,7 @@ impl Node {
             outputs: 0,
             flow: egui::Direction::LeftToRight,
             socket_radius: 3.0,
+            animation_time: 0.1,
         }
     }
 
@@ -142,6 +144,14 @@ impl Node {
         self
     }
 
+    /// The time taken (seconds) for the node to interpolate toward a new location.
+    ///
+    /// Default: `0.1`.
+    pub fn animation_time(mut self, time: f32) -> Self {
+        self.animation_time = time;
+        self
+    }
+
     /// Present the `Node`'s `Window` and add the given contents.
     pub fn show(
         self,
@@ -169,7 +179,7 @@ impl Node {
         ctx.visited.insert(self.id);
 
         // Determine the current position of the window relative to the graph origin.
-        let pos_graph = layout.entry(self.id).or_insert_with(|| {
+        let target_pos_graph = layout.entry(self.id).or_insert_with(|| {
             // If the mouse is over the graph, add the node under the mouse.
             // Otherwise, add the node to the top-left.
             let mut pos = camera.pos - ctx.full_rect.center() + ui.spacing().item_spacing;
@@ -182,8 +192,18 @@ impl Node {
             egui::Pos2::new(pos.x, pos.y)
         });
 
+        // Interpolate toward the desired position over time for auto-layout.
+        let pos_graph = {
+            let ctx = ui.ctx();
+            let idx = self.id.with("x");
+            let idy = self.id.with("y");
+            let x = ctx.animate_value_with_time(idx, target_pos_graph.x, self.animation_time);
+            let y = ctx.animate_value_with_time(idy, target_pos_graph.y, self.animation_time);
+            egui::Pos2::new(x, y)
+        };
+
         // Translate the graph position to a position within the UI.
-        let pos_screen = camera.graph_to_screen(ctx.full_rect, *pos_graph);
+        let pos_screen = camera.graph_to_screen(ctx.full_rect, pos_graph);
 
         // The window should always be at least the interaction size.
         let min_item_spacing = ui.spacing().item_spacing.x.min(ui.spacing().item_spacing.y);
@@ -315,7 +335,7 @@ impl Node {
                         if let crate::PressAction::DragNodes { ref mut node } = pressed.action {
                             *node = Some(crate::PressedNode {
                                 id: self.id,
-                                position_at_origin: *pos_graph,
+                                position_at_origin: pos_graph,
                             });
                         }
                     }
@@ -365,7 +385,7 @@ impl Node {
         }
 
         if response.rect.min != pos_screen {
-            *pos_graph += response.rect.min - pos_screen;
+            *target_pos_graph += response.rect.min - pos_screen;
             response.mark_changed();
         }
 
