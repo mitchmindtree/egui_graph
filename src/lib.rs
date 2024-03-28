@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "layout")]
-pub use layout::layout;
+pub use layout::{layout, GraphLayout};
 
 pub mod bezier;
 #[cfg(feature = "layout")]

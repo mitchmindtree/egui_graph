@@ -28,6 +28,7 @@ struct State {
     node_spacing: [f32; 2],
     node_id_map: HashMap<egui::Id, NodeIndex>,
     center_view: bool,
+    graph_layout: egui_graph::layout::GraphLayout,
 }
 
 #[derive(Default)]
@@ -62,6 +63,9 @@ impl App {
         let ctx = &cc.egui_ctx;
         ctx.set_fonts(egui::FontDefinitions::default());
         let graph = new_graph();
+        let flow = egui::Direction::TopDown;
+        let node_spacing = [1.0, 1.0];
+        let graph_layout = layout(&graph, flow, node_spacing, ctx);
         let state = State {
             graph,
             interaction: Default::default(),
@@ -69,11 +73,12 @@ impl App {
             socket_radius: 3.0,
             wire_width: 1.0,
             wire_color: ctx.style().visuals.weak_text_color(),
-            flow: egui::Direction::TopDown,
+            flow,
             auto_layout: true,
-            node_spacing: [1.0, 1.0],
+            node_spacing,
             node_id_map: Default::default(),
             center_view: false,
+            graph_layout,
         };
         let view = Default::default();
         App { view, state }
@@ -83,12 +88,13 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if self.state.auto_layout {
-            self.view.layout = layout(
+            self.state.graph_layout = layout(
                 &self.state.graph,
                 self.state.flow,
                 self.state.node_spacing,
                 ctx,
             );
+            self.view.layout = self.state.graph_layout.nodes();
         }
         gui(ctx, &mut self.view, &mut self.state);
     }
@@ -120,9 +126,9 @@ fn node(name: impl ToString, kind: NodeKind) -> Node {
 fn layout(
     graph: &Graph,
     flow: egui::Direction,
-    node_spacing: [f32; 2],
+    _node_spacing: [f32; 2],
     ctx: &egui::Context,
-) -> egui_graph::Layout {
+) -> egui_graph::GraphLayout {
     ctx.memory(|m| {
         let nodes = graph.node_indices().map(|n| {
             let id = egui::Id::new(n);
@@ -136,13 +142,7 @@ fn layout(
             .edge_indices()
             .filter_map(|e| graph.edge_endpoints(e))
             .map(|(a, b)| (egui::Id::new(a), egui::Id::new(b)));
-        let mut layout = egui_graph::layout(nodes, edges, flow);
-        // Apply custom offset spacing to the layout
-        for pos in layout.values_mut() {
-            pos.x *= node_spacing[0];
-            pos.y *= node_spacing[1];
-        }
-        layout
+        egui_graph::layout(nodes, edges, flow)
     })
 }
 
@@ -272,29 +272,38 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
     let mut primary_released_on_edge = false;
     let selection_threshold = state.wire_width * 8.0; // Threshold for selecting the edge
 
+    println!("------");
     for e in indices {
         let (na, nb) = state.graph.edge_endpoints(e).unwrap();
         let (output, input) = *state.graph.edge_weight(e).unwrap();
         let a = egui::Id::new(na);
         let b = egui::Id::new(nb);
-        let a_out = ectx.output(ui, a, output).unwrap();
-        let b_in = ectx.input(ui, b, input).unwrap();
-        let bezier = egui_graph::bezier::Cubic::from_edge_points(a_out, b_in);
-        let dist_per_pt = 5.0;
-        let pts: Vec<_> = bezier.flatten(dist_per_pt).collect();
 
-        // Check if mouse is over the bezier curve
-        let closest_point = bezier.closest_point(dist_per_pt, egui::Pos2::from(mouse_pos));
-        let distance_to_mouse = closest_point.distance(egui::Pos2::from(mouse_pos));
-        if distance_to_mouse < selection_threshold && primary_released {
-            primary_released_on_edge = true;
-            // If Shift is not held, clear previous selection
-            if !shift_held {
-                state.interaction.selection.edges.clear();
-            }
-            // Add the clicked edge to the selection
-            state.interaction.selection.edges.insert(e);
+        let mut curve = state.graph_layout.edge_path(a, b);
+        if curve.is_empty() {
+            continue;
         }
+
+        println!("{e:?}: {:?}", state.graph_layout.edge_path(a, b));
+
+        // let a_out = ectx.output(ui, a, output).unwrap();
+        // let b_in = ectx.input(ui, b, input).unwrap();
+        // let bezier = egui_graph::bezier::Cubic::from_edge_points(a_out, b_in);
+        // let dist_per_pt = 5.0;
+        // let pts: Vec<_> = bezier.flatten(dist_per_pt).collect();
+
+        // // Check if mouse is over the bezier curve
+        // let closest_point = bezier.closest_point(dist_per_pt, egui::Pos2::from(mouse_pos));
+        // let distance_to_mouse = closest_point.distance(egui::Pos2::from(mouse_pos));
+        // if distance_to_mouse < selection_threshold && click {
+        //     clicked_on_edge = true;
+        //     // If Shift is not held, clear previous selection
+        //     if !shift_held {
+        //         state.interaction.selection.edges.clear();
+        //     }
+        //     // Add the clicked edge to the selection
+        //     state.interaction.selection.edges.insert(e);
+        // }
 
         let wire_stroke = if state.interaction.selection.edges.contains(&e) {
             egui::Stroke {
@@ -306,6 +315,21 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         };
 
         // Draw the bezier curve
+        let (mut src, mut ctrl_1) = curve[0];
+        let mut pts = vec![src];
+        for &(ctrl_2, dst) in &curve[1..] {
+            let shape = egui::epaint::CubicBezierShape {
+                points: [src, ctrl_1, ctrl_2, dst],
+                closed: false,
+                fill: egui::Color32::TRANSPARENT,
+                stroke: wire_stroke.into(),
+            };
+            let tolerance = 0.3;
+            pts.extend(shape.flatten(Some(tolerance)).into_iter().skip(1));
+            src = dst;
+            ctrl_1 = dst + (dst - ctrl_2);
+        }
+
         ui.painter()
             .add(egui::Shape::line(pts.clone(), wire_stroke));
     }
@@ -352,8 +376,9 @@ fn graph_config(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut Stat
                 ui.separator();
                 ui.add_enabled_ui(!state.auto_layout, |ui| {
                     if ui.button("Layout Once").clicked() {
-                        view.layout =
+                        state.graph_layout =
                             layout(&state.graph, state.flow, state.node_spacing, ui.ctx());
+                        view.layout = state.graph_layout.nodes();
                     }
                 });
             });
