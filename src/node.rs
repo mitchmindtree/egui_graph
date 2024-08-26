@@ -75,8 +75,7 @@ impl Node {
     }
 
     // Construct the node directly from its `egui::Id`.
-    // TODO: Should this be exposed?
-    fn from_id(id: egui::Id) -> Self {
+    pub fn from_id(id: egui::Id) -> Self {
         Self {
             id,
             frame: None,
