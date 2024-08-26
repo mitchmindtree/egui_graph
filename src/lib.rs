@@ -155,7 +155,7 @@ pub struct Sockets {
 
 /// A context to assist with the instantiation of node widgets.
 pub struct NodesCtx<'a> {
-    graph_id: egui::Id,
+    pub graph_id: egui::Id,
     full_rect: egui::Rect,
     selection_rect: Option<egui::Rect>,
     select: bool,
@@ -735,6 +735,13 @@ impl Drop for Show {
 /// Combines the given id src with the `TypeId` of the `Graph` to produce a unique `egui::Id`.
 pub fn id(id_src: impl Hash) -> egui::Id {
     egui::Id::new((std::any::TypeId::of::<Graph>(), id_src))
+}
+
+/// Checks if a node with the given ID is currently selected in the specified graph.
+pub fn is_node_selected(ui: &egui::Ui, graph_id: egui::Id, node_id: egui::Id) -> bool {
+    let gmem_arc = memory(ui, graph_id);
+    let gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
+    gmem.selection.nodes.contains(&node_id)
 }
 
 /// Short-hand for retrieving access to the graph's temporary memory from the `Ui`.

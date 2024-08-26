@@ -2,7 +2,7 @@ use eframe::egui;
 use egui_graph::node::{EdgeEvent, SocketKind};
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use petgraph::visit::EdgeRef;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -25,6 +25,7 @@ struct State {
     wire_width: f32,
     wire_color: egui::Color32,
     auto_layout: bool,
+    node_id_map: HashMap<egui::Id, NodeIndex>,
 }
 
 #[derive(Default)]
@@ -69,6 +70,7 @@ impl App {
             wire_color: ctx.style().visuals.weak_text_color(),
             flow: egui::Direction::TopDown,
             auto_layout: true,
+            node_id_map: Default::default(),
         };
         App { state }
     }
@@ -153,7 +155,9 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             .fold(0, |max, e| std::cmp::max(max, e.weight().0 + 1));
         let node = &mut state.graph[n];
         let graph_view = &mut state.view;
-        let response = egui_graph::node::Node::new(n)
+        let egui_id = egui::Id::new(n);
+        state.node_id_map.insert(egui_id, n);
+        let response = egui_graph::node::Node::from_id(egui_id)
             .inputs(inputs)
             .outputs(outputs)
             .flow(state.flow)
@@ -184,13 +188,11 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             });
 
         if response.changed() {
-            // Keep track of the selected nodes.
-            if let Some(selected) = response.selection() {
-                if selected {
-                    assert!(state.interaction.selection.nodes.insert(n));
-                } else {
-                    assert!(state.interaction.selection.nodes.remove(&n));
-                }
+            // Update the selected nodes.
+            if egui_graph::is_node_selected(ui, nctx.graph_id, egui_id) {
+                state.interaction.selection.nodes.insert(n);
+            } else {
+                state.interaction.selection.nodes.remove(&n);
             }
 
             // Check for an edge event.
@@ -226,6 +228,7 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             // If the delete key was pressed while selected, remove it.
             if response.removed() {
                 state.graph.remove_node(n);
+                state.node_id_map.remove(&egui_id);
             }
         }
     }
