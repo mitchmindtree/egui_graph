@@ -189,9 +189,7 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
 
         if response.changed() {
             // Update the selected nodes.
-            let gmem_arc = egui_graph::memory(ui, nctx.graph_id);
-            let gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
-            if gmem.selection.nodes.contains(&egui_id) {
+            if egui_graph::is_node_selected(ui, nctx.graph_id, egui_id) {
                 state.interaction.selection.nodes.insert(n);
             } else {
                 state.interaction.selection.nodes.remove(&n);

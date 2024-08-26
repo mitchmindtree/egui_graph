@@ -25,7 +25,7 @@ pub struct GraphTempMemory {
     /// contents have been instantiated.
     node_sizes: HashMap<egui::Id, egui::Vec2>,
     /// The currently selected nodes and edges.
-    pub selection: Selection,
+    selection: Selection,
     /// Whether or not the primary button was pressed on the graph area and is still down.
     ///
     /// Used for tracking selection and dragging.
@@ -41,9 +41,9 @@ pub struct GraphTempMemory {
 }
 
 #[derive(Clone, Default)]
-pub struct Selection {
+struct Selection {
     /// The set of currently selected nodes.
-    pub nodes: HashSet<egui::Id>,
+    nodes: HashSet<egui::Id>,
     /// The set of currently selected edges.
     edges: HashSet<(node::Socket, node::Socket)>,
 }
@@ -737,8 +737,15 @@ pub fn id(id_src: impl Hash) -> egui::Id {
     egui::Id::new((std::any::TypeId::of::<Graph>(), id_src))
 }
 
+/// Checks if a node with the given ID is currently selected in the specified graph.
+pub fn is_node_selected(ui: &egui::Ui, graph_id: egui::Id, node_id: egui::Id) -> bool {
+    let gmem_arc = memory(ui, graph_id);
+    let gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
+    gmem.selection.nodes.contains(&node_id)
+}
+
 /// Short-hand for retrieving access to the graph's temporary memory from the `Ui`.
-pub fn memory(ui: &egui::Ui, graph_id: egui::Id) -> Arc<Mutex<GraphTempMemory>> {
+fn memory(ui: &egui::Ui, graph_id: egui::Id) -> Arc<Mutex<GraphTempMemory>> {
     ui.ctx().data_mut(|d| {
         d.get_temp_mut_or_default::<Arc<Mutex<GraphTempMemory>>>(graph_id)
             .clone()
