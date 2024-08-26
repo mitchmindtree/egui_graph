@@ -25,6 +25,7 @@ struct State {
     wire_width: f32,
     wire_color: egui::Color32,
     auto_layout: bool,
+    node_spacing: [f32; 2],
     node_id_map: HashMap<egui::Id, NodeIndex>,
 }
 
@@ -70,6 +71,7 @@ impl App {
             wire_color: ctx.style().visuals.weak_text_color(),
             flow: egui::Direction::TopDown,
             auto_layout: true,
+            node_spacing: [1.0, 1.0],
             node_id_map: Default::default(),
         };
         App { state }
@@ -80,7 +82,12 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         gui(ctx, &mut self.state);
         if self.state.auto_layout {
-            self.state.view.layout = layout(&self.state.graph, self.state.flow, ctx);
+            self.state.view.layout = layout(
+                &self.state.graph,
+                self.state.flow,
+                self.state.node_spacing,
+                ctx,
+            );
         }
     }
 }
@@ -108,7 +115,12 @@ fn node(name: impl ToString, kind: NodeKind) -> Node {
     Node { name, kind }
 }
 
-fn layout(graph: &Graph, flow: egui::Direction, ctx: &egui::Context) -> egui_graph::Layout {
+fn layout(
+    graph: &Graph,
+    flow: egui::Direction,
+    node_spacing: [f32; 2],
+    ctx: &egui::Context,
+) -> egui_graph::Layout {
     ctx.memory(|m| {
         let nodes = graph.node_indices().map(|n| {
             let id = egui::Id::new(n);
@@ -122,7 +134,13 @@ fn layout(graph: &Graph, flow: egui::Direction, ctx: &egui::Context) -> egui_gra
             .edge_indices()
             .filter_map(|e| graph.edge_endpoints(e))
             .map(|(a, b)| (egui::Id::new(a), egui::Id::new(b)));
-        egui_graph::layout(nodes, edges, flow)
+        let mut layout = egui_graph::layout(nodes, edges, flow);
+        // Apply custom offset spacing to the layout
+        for pos in layout.values_mut() {
+            pos.x *= node_spacing[0];
+            pos.y *= node_spacing[1];
+        }
+        layout
     })
 }
 
@@ -328,7 +346,8 @@ fn graph_config(ui: &mut egui::Ui, state: &mut State) {
                 ui.scope(|ui| {
                     ui.set_enabled(!state.auto_layout);
                     if ui.button("Layout Once").clicked() {
-                        state.view.layout = layout(&state.graph, state.flow, ui.ctx());
+                        state.view.layout =
+                            layout(&state.graph, state.flow, state.node_spacing, ui.ctx());
                     }
                 });
             });
@@ -336,6 +355,14 @@ fn graph_config(ui: &mut egui::Ui, state: &mut State) {
                 ui.label("Flow:");
                 ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");
                 ui.radio_value(&mut state.flow, egui::Direction::TopDown, "Down");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Node spacing X:");
+                ui.add(egui::Slider::new(&mut state.node_spacing[0], 0.75..=2.0));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Node spacing Y:");
+                ui.add(egui::Slider::new(&mut state.node_spacing[1], 0.5..=2.0));
             });
             ui.horizontal(|ui| {
                 ui.label("Wire width:");
