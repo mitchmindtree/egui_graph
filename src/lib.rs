@@ -422,7 +422,8 @@ impl Graph {
                 ..vis.bg_stroke
             };
             let fill = vis.bg_fill;
-            ui.painter().rect(full_rect, 0.0, fill, stroke);
+            ui.painter()
+                .rect(full_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
         }
 
         // Paint some subtle dots to check camera movement.
@@ -445,7 +446,8 @@ impl Graph {
                     width: 0.0,
                     ..vis.bg_stroke
                 };
-                ui.painter().rect(r, 0.0, color, stroke);
+                ui.painter()
+                    .rect(r, 0.0, color, stroke, egui::StrokeKind::Inside);
             }
         }
 
@@ -456,11 +458,16 @@ impl Graph {
             let fill = color.linear_multiply(0.125);
             let width = 1.0;
             let stroke = egui::Stroke { width, color };
-            ui.painter().rect(r, 0.0, fill, stroke);
+            ui.painter()
+                .rect(r, 0.0, fill, stroke, egui::StrokeKind::Inside);
         }
 
         // Create a child UI over the full surface of the graph widget.
-        let mut ui = ui.child_ui(full_rect, *ui.layout());
+        let mut ui = ui.new_child(egui::UiBuilder {
+            max_rect: Some(full_rect),
+            layout: Some(*ui.layout()),
+            ..Default::default()
+        });
         ui.set_clip_rect(full_rect);
 
         Show {

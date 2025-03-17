@@ -216,7 +216,7 @@ impl Node {
         // inlets/outlets.
         let max_sockets = std::cmp::max(self.inputs, self.outputs);
         let min_socket_gap = min_interact_len + min_item_spacing;
-        let win_corner_radius = ui.visuals().window_rounding.ne;
+        let win_corner_radius = ui.visuals().window_corner_radius.ne as f32;
         let socket_padding = win_corner_radius + min_interact_len * 0.5;
         let min_len = (max_sockets.max(1) - 1) as f32 * min_socket_gap + socket_padding * 2.0;
         if max_sockets > 1 {
@@ -288,6 +288,7 @@ impl Node {
             .id(self.id)
             .frame(frame)
             .resizable(false)
+            .movable(false)
             // TODO: These `min_*` and `default_size` methods seem to be totally ignored? Should
             // fix this upstream, but for now we just set min size on the window's `Ui` instead.
             .min_width(min_size.x)
@@ -295,7 +296,7 @@ impl Node {
             .default_size(min_size)
             // TODO: Only `max_size` seems to be considered here - `min_size` seems to be ignored.
             .resize(|resize| resize.max_size(max_size).min_size(min_size))
-            .fixed_pos(pos_screen)
+            .current_pos(pos_screen)
             .collapsible(false)
             .title_bar(false)
             .auto_sized()
@@ -330,13 +331,21 @@ impl Node {
                 } else {
                     selection_changed = gmem.selection.nodes.insert(self.id);
                     selected = true;
-                    if let Some(ref mut pressed) = gmem.pressed {
-                        if let crate::PressAction::DragNodes { ref mut node } = pressed.action {
-                            *node = Some(crate::PressedNode {
-                                id: self.id,
-                                position_at_origin: pos_graph,
-                            });
-                        }
+                    // We must initialize gmem.pressed here so that subsequent drag updates work correctly.
+                    if gmem.pressed.is_none() {
+                        let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
+                        let ptr_graph = view.camera.screen_to_graph(ctx.full_rect, ptr_screen);
+                        gmem.pressed = Some(crate::Pressed {
+                            over_selection_at_origin: true,
+                            origin_pos: ptr_graph,
+                            current_pos: ptr_graph,
+                            action: crate::PressAction::DragNodes {
+                                node: Some(crate::PressedNode {
+                                    id: self.id,
+                                    position_at_origin: pos_graph,
+                                }),
+                            },
+                        });
                     }
                 }
 
@@ -360,6 +369,7 @@ impl Node {
                         .as_ref()
                         .map(|p| p.over_selection_at_origin)
                         .unwrap_or(false)
+                    && !gmem.selection.nodes.contains(&self.id)
                 {
                     selection_changed = gmem.selection.nodes.remove(&self.id);
                     selected = false;
@@ -601,7 +611,8 @@ impl DerefMut for NodeResponse {
 /// The default frame styling used for the `Node`'s `Window`.
 pub fn default_frame(style: &egui::Style) -> egui::Frame {
     let mut frame = egui::Frame::window(style);
-    frame.shadow.extrusion *= 0.25;
+    frame.shadow.offset = [2, 2];
+    frame.shadow.spread = (frame.shadow.spread as f32 * 0.25) as u8;
     frame.stroke.width = 0.0;
     frame
 }
