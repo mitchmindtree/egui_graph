@@ -345,9 +345,9 @@ impl Node {
                                 }),
                             },
                         });
-                        eprintln!("Set gmem.pressed for node {:?}", self.id);
                     }
                 }
+
             // If the primary button was pressed, check for edge events.
             } else if !response.is_pointer_button_down_on() && primary_pressed(pointer) {
                 // If this node's socket was pressed, create a start event.
