@@ -288,6 +288,7 @@ impl Node {
             .id(self.id)
             .frame(frame)
             .resizable(false)
+            .movable(false)
             // TODO: These `min_*` and `default_size` methods seem to be totally ignored? Should
             // fix this upstream, but for now we just set min size on the window's `Ui` instead.
             .min_width(min_size.x)
