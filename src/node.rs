@@ -331,6 +331,7 @@ impl Node {
                 } else {
                     selection_changed = gmem.selection.nodes.insert(self.id);
                     selected = true;
+                    // We must initialize gmem.pressed here so that subsequent drag updates work correctly.
                     if gmem.pressed.is_none() {
                         let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
                         let ptr_graph = view.camera.screen_to_graph(ctx.full_rect, ptr_screen);
