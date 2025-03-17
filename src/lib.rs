@@ -271,7 +271,6 @@ impl Graph {
 
             gmem.closest_socket = closest_socket.map(|(socket, _)| socket);
 
-            eprintln!("gmem.pressed {:?}", gmem.pressed.is_some());
             let selected_nodes: Vec<egui::Id> = gmem.selection.nodes.iter().copied().collect();
 
             // Check for selecting/dragging.
@@ -284,14 +283,14 @@ impl Graph {
                         node: Some(ref node),
                     } => {
                         // For each selected node except the primary dragged node,
-            // apply the incremental delta.
-            for n_id in selected_nodes {
-                if n_id != node.id {
-                    if let Some(pos) = view.layout.get_mut(&n_id) {
-                        *pos += delta;
-                    }
-                }
-            }
+                        // apply the incremental delta.
+                        for n_id in selected_nodes {
+                            if n_id != node.id {
+                                if let Some(pos) = view.layout.get_mut(&n_id) {
+                                    *pos += delta;
+                                }
+                            }
+                        }
                         // // Determine the drag delta.
                         // let delta = ptr_graph - pressed.origin_pos;
                         // let target = node.position_at_origin + delta;

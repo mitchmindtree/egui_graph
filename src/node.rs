@@ -331,31 +331,6 @@ impl Node {
                 } else {
                     selection_changed = gmem.selection.nodes.insert(self.id);
                     selected = true;
-                    // if let Some(ref mut pressed) = gmem.pressed {
-                    //     if let crate::PressAction::DragNodes { ref mut node } = pressed.action {
-                    //         *node = Some(crate::PressedNode {
-                    //             id: self.id,
-                    //             position_at_origin: pos_graph,
-                    //         });
-                    //     }
-                    // } else {
-                    //     // Get the pointer's screen position and convert it to graph coordinates.
-                    //     let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
-                    //     let ptr_graph = view.camera.screen_to_graph(ctx.full_rect, ptr_screen);
-                    //     gmem.pressed = Some(crate::Pressed {
-                    //         over_selection_at_origin: true, // since we're dragging a selected node
-                    //         origin_pos: ptr_graph, // use the pointer's graph coordinate at press time
-                    //         current_pos: ptr_graph,
-                    //         action: crate::PressAction::DragNodes {
-                    //             node: Some(crate::PressedNode {
-                    //                 id: self.id,
-                    //                 position_at_origin: pos_graph,
-                    //             }),
-                    //         },
-                    //     });
-                    //     eprintln!("Set gmem.pressed for node {:?}", self.id);
-                    // }
-                    // Only set gmem.pressed if it hasn't been set already
                     if gmem.pressed.is_none() {
                         let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
                         let ptr_graph = view.camera.screen_to_graph(ctx.full_rect, ptr_screen);
@@ -373,9 +348,9 @@ impl Node {
                         eprintln!("Set gmem.pressed for node {:?}", self.id);
                     }
                 }
-
+            }
             // If the primary button was pressed, check for edge events.
-            } else if !response.is_pointer_button_down_on() && primary_pressed(pointer) {
+            else if !response.is_pointer_button_down_on() && primary_pressed(pointer) {
                 // If this node's socket was pressed, create a start event.
                 if let Some(ref pressed) = gmem.pressed {
                     if let crate::PressAction::Socket(socket) = pressed.action {
@@ -394,6 +369,7 @@ impl Node {
                         .as_ref()
                         .map(|p| p.over_selection_at_origin)
                         .unwrap_or(false)
+                    && !gmem.selection.nodes.contains(&self.id)
                 {
                     selection_changed = gmem.selection.nodes.remove(&self.id);
                     selected = false;
@@ -565,6 +541,7 @@ impl Node {
             // Remove ourselves from the selection.
             let gmem_arc = crate::memory(ui, ctx.graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
+            dbg!();
             selection_changed = gmem.selection.nodes.remove(&self.id);
             selected = false;
             true
