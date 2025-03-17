@@ -216,7 +216,7 @@ impl Node {
         // inlets/outlets.
         let max_sockets = std::cmp::max(self.inputs, self.outputs);
         let min_socket_gap = min_interact_len + min_item_spacing;
-        let win_corner_radius = ui.visuals().window_rounding.ne;
+        let win_corner_radius = ui.visuals().window_corner_radius.ne as f32;
         let socket_padding = win_corner_radius + min_interact_len * 0.5;
         let min_len = (max_sockets.max(1) - 1) as f32 * min_socket_gap + socket_padding * 2.0;
         if max_sockets > 1 {
@@ -611,7 +611,8 @@ impl DerefMut for NodeResponse {
 /// The default frame styling used for the `Node`'s `Window`.
 pub fn default_frame(style: &egui::Style) -> egui::Frame {
     let mut frame = egui::Frame::window(style);
-    frame.shadow.spread *= 0.25;
+    frame.shadow.offset = [2, 2];
+    frame.shadow.spread = (frame.shadow.spread as f32 * 0.25) as u8;
     frame.stroke.width = 0.0;
     frame
 }
