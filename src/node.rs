@@ -288,7 +288,6 @@ impl Node {
             .id(self.id)
             .frame(frame)
             .resizable(false)
-            .movable(true)
             // TODO: These `min_*` and `default_size` methods seem to be totally ignored? Should
             // fix this upstream, but for now we just set min size on the window's `Ui` instead.
             .min_width(min_size.x)
@@ -296,7 +295,8 @@ impl Node {
             .default_size(min_size)
             // TODO: Only `max_size` seems to be considered here - `min_size` seems to be ignored.
             .resize(|resize| resize.max_size(max_size).min_size(min_size))
-            .fixed_pos(pos_screen)
+            // .fixed_pos(pos_screen)
+            .current_pos(pos_screen)
             .collapsible(false)
             .title_bar(false)
             .auto_sized()
@@ -331,13 +331,46 @@ impl Node {
                 } else {
                     selection_changed = gmem.selection.nodes.insert(self.id);
                     selected = true;
-                    if let Some(ref mut pressed) = gmem.pressed {
-                        if let crate::PressAction::DragNodes { ref mut node } = pressed.action {
-                            *node = Some(crate::PressedNode {
-                                id: self.id,
-                                position_at_origin: pos_graph,
-                            });
-                        }
+                    // if let Some(ref mut pressed) = gmem.pressed {
+                    //     if let crate::PressAction::DragNodes { ref mut node } = pressed.action {
+                    //         *node = Some(crate::PressedNode {
+                    //             id: self.id,
+                    //             position_at_origin: pos_graph,
+                    //         });
+                    //     }
+                    // } else {
+                    //     // Get the pointer's screen position and convert it to graph coordinates.
+                    //     let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
+                    //     let ptr_graph = view.camera.screen_to_graph(ctx.full_rect, ptr_screen);
+                    //     gmem.pressed = Some(crate::Pressed {
+                    //         over_selection_at_origin: true, // since we're dragging a selected node
+                    //         origin_pos: ptr_graph, // use the pointer's graph coordinate at press time
+                    //         current_pos: ptr_graph,
+                    //         action: crate::PressAction::DragNodes {
+                    //             node: Some(crate::PressedNode {
+                    //                 id: self.id,
+                    //                 position_at_origin: pos_graph,
+                    //             }),
+                    //         },
+                    //     });
+                    //     eprintln!("Set gmem.pressed for node {:?}", self.id);
+                    // }
+                    // Only set gmem.pressed if it hasn't been set already
+                    if gmem.pressed.is_none() {
+                        let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
+                        let ptr_graph = view.camera.screen_to_graph(ctx.full_rect, ptr_screen);
+                        gmem.pressed = Some(crate::Pressed {
+                            over_selection_at_origin: true,
+                            origin_pos: ptr_graph,
+                            current_pos: ptr_graph,
+                            action: crate::PressAction::DragNodes {
+                                node: Some(crate::PressedNode {
+                                    id: self.id,
+                                    position_at_origin: pos_graph,
+                                }),
+                            },
+                        });
+                        eprintln!("Set gmem.pressed for node {:?}", self.id);
                     }
                 }
 

@@ -271,26 +271,40 @@ impl Graph {
 
             gmem.closest_socket = closest_socket.map(|(socket, _)| socket);
 
+            eprintln!("gmem.pressed {:?}", gmem.pressed.is_some());
+            let selected_nodes: Vec<egui::Id> = gmem.selection.nodes.iter().copied().collect();
+
             // Check for selecting/dragging.
             if let Some(pressed) = gmem.pressed.as_mut() {
+                let delta = ptr_graph - pressed.current_pos;
+
                 pressed.current_pos = ptr_graph;
                 match pressed.action {
                     PressAction::DragNodes {
                         node: Some(ref node),
                     } => {
-                        // Determine the drag delta.
-                        let delta = ptr_graph - pressed.origin_pos;
-                        let target = node.position_at_origin + delta;
-                        let mut drag_delta = egui::Vec2::ZERO;
-                        if let Some(current) = view.layout.get(&node.id) {
-                            drag_delta = target - *current;
-                        }
-                        // Apply drag delta to all selected nodes.
-                        for &n_id in &gmem.selection.nodes {
-                            if let Some(pos) = view.layout.get_mut(&n_id) {
-                                *pos += drag_delta;
-                            }
-                        }
+                        // For each selected node except the primary dragged node,
+            // apply the incremental delta.
+            for n_id in selected_nodes {
+                if n_id != node.id {
+                    if let Some(pos) = view.layout.get_mut(&n_id) {
+                        *pos += delta;
+                    }
+                }
+            }
+                        // // Determine the drag delta.
+                        // let delta = ptr_graph - pressed.origin_pos;
+                        // let target = node.position_at_origin + delta;
+                        // let mut drag_delta = egui::Vec2::ZERO;
+                        // if let Some(current) = view.layout.get(&node.id) {
+                        //     drag_delta = target - *current;
+                        // }
+                        // // Apply drag delta to all selected nodes.
+                        // for &n_id in &gmem.selection.nodes {
+                        //     if let Some(pos) = view.layout.get_mut(&n_id) {
+                        //         *pos += drag_delta;
+                        //     }
+                        // }
                     }
                     PressAction::Select => {
                         let min = view.camera.graph_to_screen(full_rect, pressed.origin_pos);
