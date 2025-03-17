@@ -291,19 +291,6 @@ impl Graph {
                                 }
                             }
                         }
-                        // // Determine the drag delta.
-                        // let delta = ptr_graph - pressed.origin_pos;
-                        // let target = node.position_at_origin + delta;
-                        // let mut drag_delta = egui::Vec2::ZERO;
-                        // if let Some(current) = view.layout.get(&node.id) {
-                        //     drag_delta = target - *current;
-                        // }
-                        // // Apply drag delta to all selected nodes.
-                        // for &n_id in &gmem.selection.nodes {
-                        //     if let Some(pos) = view.layout.get_mut(&n_id) {
-                        //         *pos += drag_delta;
-                        //     }
-                        // }
                     }
                     PressAction::Select => {
                         let min = view.camera.graph_to_screen(full_rect, pressed.origin_pos);

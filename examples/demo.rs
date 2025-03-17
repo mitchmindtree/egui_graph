@@ -328,7 +328,6 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
 
 fn graph_config(ui: &mut egui::Ui, state: &mut State) {
     let mut frame = egui::Frame::window(ui.style());
-    //frame.shadow.extrusion = 0.0;
     frame.shadow.spread = 0.0;
     egui::Window::new("Graph Config")
         .frame(frame)

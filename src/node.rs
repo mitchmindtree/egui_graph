@@ -295,7 +295,6 @@ impl Node {
             .default_size(min_size)
             // TODO: Only `max_size` seems to be considered here - `min_size` seems to be ignored.
             .resize(|resize| resize.max_size(max_size).min_size(min_size))
-            // .fixed_pos(pos_screen)
             .current_pos(pos_screen)
             .collapsible(false)
             .title_bar(false)
@@ -348,9 +347,8 @@ impl Node {
                         eprintln!("Set gmem.pressed for node {:?}", self.id);
                     }
                 }
-            }
             // If the primary button was pressed, check for edge events.
-            else if !response.is_pointer_button_down_on() && primary_pressed(pointer) {
+            } else if !response.is_pointer_button_down_on() && primary_pressed(pointer) {
                 // If this node's socket was pressed, create a start event.
                 if let Some(ref pressed) = gmem.pressed {
                     if let crate::PressAction::Socket(socket) = pressed.action {
@@ -541,7 +539,6 @@ impl Node {
             // Remove ourselves from the selection.
             let gmem_arc = crate::memory(ui, ctx.graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
-            dbg!();
             selection_changed = gmem.selection.nodes.remove(&self.id);
             selected = false;
             true
@@ -612,7 +609,6 @@ impl DerefMut for NodeResponse {
 /// The default frame styling used for the `Node`'s `Window`.
 pub fn default_frame(style: &egui::Style) -> egui::Frame {
     let mut frame = egui::Frame::window(style);
-    // frame.shadow.extrusion *= 0.25;
     frame.shadow.spread *= 0.25;
     frame.stroke.width = 0.0;
     frame
