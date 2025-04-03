@@ -325,10 +325,15 @@ impl Node {
             let pointer = &ui.input(|i| i.pointer.clone());
             if response.is_pointer_button_down_on() && primary_pressed(pointer) {
                 // If ctrl is down, check for deselection.
-                if ctrl_down && gmem.selection.nodes.contains(&self.id) {
+                let was_selected = gmem.selection.nodes.contains(&self.id);
+                if ctrl_down && was_selected {
                     selection_changed = gmem.selection.nodes.remove(&self.id);
                     selected = false;
                 } else {
+                    // Clear other selections if ctrl is not pressed and this is newly pressed.
+                    if !ctrl_down && !was_selected {
+                        gmem.selection.nodes.clear();
+                    }
                     selection_changed = gmem.selection.nodes.insert(self.id);
                     selected = true;
                     // We must initialize gmem.pressed here so that subsequent drag updates work correctly.
