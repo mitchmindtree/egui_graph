@@ -208,70 +208,14 @@ impl Graph {
         if let Some(ptr_screen) = pointer.interact_pos().or(pointer.hover_pos()) {
             // The location of the pointer over the graph.
             let ptr_graph = view.camera.screen_to_graph(full_rect, ptr_screen);
+
             // Check for the closest socket.
-            // TODO: if we wanted to be super efficient, we could maintain a quadtree of nodes
-            // and sockets...
-            let mut closest_socket = None;
-            if ptr_on_graph {
-                let socket_radius = ui
-                    .spacing()
-                    .interact_size
-                    .x
-                    .min(ui.spacing().interact_size.y);
-                let socket_radius_sq = socket_radius * socket_radius;
-                for (&n_id, &n_graph) in &view.layout {
-                    // Only check visible nodes.
-                    let n_screen = view.camera.graph_to_screen(full_rect, n_graph);
-                    let size = match gmem.node_sizes.get(&n_id) {
-                        None => continue,
-                        Some(&size) => size,
-                    };
-                    let rect = egui::Rect::from_min_size(n_screen, size);
-                    if !full_rect.intersects(rect) {
-                        continue;
-                    }
-                    let sockets = match gmem.sockets.get(&n_id) {
-                        None => continue,
-                        Some(sockets) => sockets,
-                    };
-
-                    // Check inputs.
-                    for (ix, (p, _)) in sockets.inputs().enumerate() {
-                        let dist_sq = ptr_screen.distance_sq(p);
-                        if dist_sq < socket_radius_sq {
-                            let socket = node::Socket {
-                                node: n_id,
-                                kind: node::SocketKind::Input,
-                                index: ix,
-                            };
-                            closest_socket = match closest_socket {
-                                None => Some((socket, dist_sq)),
-                                Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
-                                _ => closest_socket,
-                            }
-                        }
-                    }
-
-                    // Check outputs.
-                    for (ix, (p, _)) in sockets.outputs().enumerate() {
-                        let dist_sq = ptr_screen.distance_sq(p);
-                        if dist_sq < socket_radius_sq {
-                            let socket = node::Socket {
-                                node: n_id,
-                                kind: node::SocketKind::Output,
-                                index: ix,
-                            };
-                            closest_socket = match closest_socket {
-                                None => Some((socket, dist_sq)),
-                                Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
-                                _ => closest_socket,
-                            }
-                        }
-                    }
-                }
-            }
-
-            gmem.closest_socket = closest_socket.map(|(socket, _)| socket);
+            let closest_socket = match ptr_on_graph {
+                true => find_closest_socket(ptr_screen, full_rect, view, &gmem, ui)
+                    .map(|(socket, _dist_sqrd)| socket),
+                false => None,
+            };
+            gmem.closest_socket = closest_socket;
 
             // Check for selecting/dragging.
             if let Some(pressed) = gmem.pressed.as_mut() {
@@ -321,7 +265,7 @@ impl Graph {
             {
                 // Choose which press action based on whether or not a socket was pressed.
                 let action = match closest_socket {
-                    Some((socket, _)) => PressAction::Socket(socket),
+                    Some(socket) => PressAction::Socket(socket),
                     None => {
                         let min = ptr_screen;
                         let max = ptr_screen;
@@ -727,6 +671,79 @@ impl Drop for Show {
     fn drop(&mut self) {
         self.prune_unused_nodes();
     }
+}
+
+/// Find the socket that is closest to the given point.
+///
+/// Returns the socket alongside the squared distance from the socket.
+fn find_closest_socket(
+    pos_screen: egui::Pos2,
+    full_rect: egui::Rect,
+    view: &View,
+    gmem: &GraphTempMemory,
+    ui: &egui::Ui,
+) -> Option<(node::Socket, f32)> {
+    // TODO: if we wanted to be super efficient, we could maintain a quadtree of
+    // nodes and sockets...
+    let mut closest_socket = None;
+    let socket_radius = ui
+        .spacing()
+        .interact_size
+        .x
+        .min(ui.spacing().interact_size.y);
+    let socket_radius_sq = socket_radius * socket_radius;
+    for (&n_id, &n_graph) in &view.layout {
+        // Only check visible nodes.
+        let n_screen = view.camera.graph_to_screen(full_rect, n_graph);
+        let size = match gmem.node_sizes.get(&n_id) {
+            None => continue,
+            Some(&size) => size,
+        };
+        let rect = egui::Rect::from_min_size(n_screen, size);
+        if !full_rect.intersects(rect) {
+            continue;
+        }
+        let sockets = match gmem.sockets.get(&n_id) {
+            None => continue,
+            Some(sockets) => sockets,
+        };
+
+        // Check inputs.
+        for (ix, (p, _)) in sockets.inputs().enumerate() {
+            let dist_sq = pos_screen.distance_sq(p);
+            if dist_sq < socket_radius_sq {
+                let socket = node::Socket {
+                    node: n_id,
+                    kind: node::SocketKind::Input,
+                    index: ix,
+                };
+                closest_socket = match closest_socket {
+                    None => Some((socket, dist_sq)),
+                    Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
+                    _ => closest_socket,
+                }
+            }
+        }
+
+        // Check outputs.
+        for (ix, (p, _)) in sockets.outputs().enumerate() {
+            let dist_sq = pos_screen.distance_sq(p);
+            if dist_sq < socket_radius_sq {
+                let socket = node::Socket {
+                    node: n_id,
+                    kind: node::SocketKind::Output,
+                    index: ix,
+                };
+                closest_socket = match closest_socket {
+                    None => Some((socket, dist_sq)),
+                    Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
+                    _ => closest_socket,
+                }
+            }
+        }
+    }
+
+    closest_socket
 }
 
 // Paint the background rect.
