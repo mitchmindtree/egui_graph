@@ -262,37 +262,8 @@ impl Graph {
 
             // If the pointer is down and near an edge of the rect, move the camera in that
             // direction.
-            let move_camera = match gmem.pressed.as_ref() {
-                None => false,
-                Some(p) => {
-                    let action_ok = !matches!(p.action, PressAction::DragNodes { ref node, .. } if node.is_none());
-                    action_ok && p.origin_pos != ptr_graph
-                }
-            };
-            if move_camera {
-                let max_vel = 8.0;
-                let mid = full_rect.center();
-                let move_dist = ui
-                    .spacing()
-                    .interact_size
-                    .x
-                    .max(ui.spacing().interact_size.y);
-                let x_vel = if ptr_screen.x < mid.x {
-                    (ptr_screen.x - (full_rect.min.x + move_dist)).min(0.0) * max_vel / move_dist
-                } else if ptr_screen.x > mid.x {
-                    (ptr_screen.x - (full_rect.max.x - move_dist)).max(0.0) * max_vel / move_dist
-                } else {
-                    0.0
-                };
-                let y_vel = if ptr_screen.y < mid.y {
-                    (ptr_screen.y - (full_rect.min.y + move_dist)).min(0.0) * max_vel / move_dist
-                } else if ptr_screen.y > mid.y {
-                    (ptr_screen.y - (full_rect.max.y - move_dist)).max(0.0) * max_vel / move_dist
-                } else {
-                    0.0
-                };
-                let vel = egui::Vec2::new(x_vel, y_vel);
-                view.camera.pos += vel;
+            if drag_moves_camera(gmem.pressed.as_ref(), ptr_graph) {
+                view.camera.pos += drag_moves_camera_velocity(full_rect, ptr_screen, ui);
             }
         }
 
@@ -795,6 +766,50 @@ fn graph_interaction(
         selection_rect,
         drag_nodes_delta,
     }
+}
+
+/// Whether or not the given `Pressed` state implies that the camera should move
+/// due to the pointer being down near the edge of the rect.
+fn drag_moves_camera(pressed: Option<&Pressed>, ptr_graph: egui::Pos2) -> bool {
+    match pressed.as_ref() {
+        None => false,
+        Some(p) => {
+            let action_ok =
+                !matches!(p.action, PressAction::DragNodes { ref node, .. } if node.is_none());
+            action_ok && p.origin_pos != ptr_graph
+        }
+    }
+}
+
+/// The velocity of the camera movement caused by dragging near the edge of
+/// the rect.
+fn drag_moves_camera_velocity(
+    full_rect: egui::Rect,
+    ptr_screen: egui::Pos2,
+    ui: &egui::Ui,
+) -> egui::Vec2 {
+    let max_vel = 8.0;
+    let mid = full_rect.center();
+    let move_dist = ui
+        .spacing()
+        .interact_size
+        .x
+        .max(ui.spacing().interact_size.y);
+    let x_vel = if ptr_screen.x < mid.x {
+        (ptr_screen.x - (full_rect.min.x + move_dist)).min(0.0) * max_vel / move_dist
+    } else if ptr_screen.x > mid.x {
+        (ptr_screen.x - (full_rect.max.x - move_dist)).max(0.0) * max_vel / move_dist
+    } else {
+        0.0
+    };
+    let y_vel = if ptr_screen.y < mid.y {
+        (ptr_screen.y - (full_rect.min.y + move_dist)).min(0.0) * max_vel / move_dist
+    } else if ptr_screen.y > mid.y {
+        (ptr_screen.y - (full_rect.max.y - move_dist)).max(0.0) * max_vel / move_dist
+    } else {
+        0.0
+    };
+    egui::Vec2::new(x_vel, y_vel)
 }
 
 // Paint a subtle dot grid to check camera movement.
