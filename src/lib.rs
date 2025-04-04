@@ -448,13 +448,8 @@ impl Graph {
 
         // Draw the selection area if there is one.
         // TODO: Do this when `Show` is `drop`ped or finalised.
-        if let Some(r) = selection_rect {
-            let color = ui.visuals().weak_text_color();
-            let fill = color.linear_multiply(0.125);
-            let width = 1.0;
-            let stroke = egui::Stroke { width, color };
-            ui.painter()
-                .rect(r, 0.0, fill, stroke, egui::StrokeKind::Inside);
+        if let Some(sel_rect) = selection_rect {
+            paint_selection_area(sel_rect, ui);
         }
 
         // Create a child UI over the full surface of the graph widget.
@@ -743,6 +738,15 @@ fn paint_background(full_rect: egui::Rect, ui: &mut egui::Ui) {
     };
     let fill = vis.bg_fill;
     ui.painter().rect(full_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
+}
+
+/// Paint the selection area rectangle.
+fn paint_selection_area(sel_rect: egui::Rect, ui: &mut egui::Ui) {
+    let color = ui.visuals().weak_text_color();
+    let fill = color.linear_multiply(0.125);
+    let width = 1.0;
+    let stroke = egui::Stroke { width, color };
+    ui.painter().rect(sel_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
 }
 
 /// Combines the given id src with the `TypeId` of the `Graph` to produce a unique `egui::Id`.
