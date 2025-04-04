@@ -367,28 +367,7 @@ impl Graph {
 
         // Paint some subtle dots to check camera movement.
         let visible_rect = egui::Rect::from_center_size(view.camera.pos, full_rect.size());
-        let dot_step = ui.spacing().interact_size.y;
-        let vis = ui.style().noninteractive();
-        let x_dots =
-            (visible_rect.min.x / dot_step) as i32..=(visible_rect.max.x / dot_step) as i32;
-        let y_dots =
-            (visible_rect.min.y / dot_step) as i32..=(visible_rect.max.y / dot_step) as i32;
-        let x_start = half_size.x - view.camera.pos.x;
-        let y_start = half_size.y - view.camera.pos.y;
-        for x_dot in x_dots {
-            for y_dot in y_dots.clone() {
-                let x = x_start + x_dot as f32 * dot_step;
-                let y = y_start + y_dot as f32 * dot_step;
-                let r = egui::Rect::from_center_size([x, y].into(), [1.0; 2].into());
-                let color = vis.bg_stroke.color;
-                let stroke = egui::Stroke {
-                    width: 0.0,
-                    ..vis.bg_stroke
-                };
-                ui.painter()
-                    .rect(r, 0.0, color, stroke, egui::StrokeKind::Inside);
-            }
-        }
+        paint_dot_grid(full_rect, visible_rect, view.camera.pos, ui);
 
         // Draw the selection area if there is one.
         // TODO: Do this when `Show` is `drop`ped or finalised.
@@ -746,15 +725,46 @@ fn find_closest_socket(
     closest_socket
 }
 
+// Paint a subtle dot grid to check camera movement.
+fn paint_dot_grid(
+    graph_rect: egui::Rect,
+    visible_rect: egui::Rect,
+    camera_pos: egui::Pos2,
+    ui: &mut egui::Ui,
+) {
+    let half_size = graph_rect.size() * 0.5;
+    let dot_step = ui.spacing().interact_size.y;
+    let vis = ui.style().noninteractive();
+    let x_dots = (visible_rect.min.x / dot_step) as i32..=(visible_rect.max.x / dot_step) as i32;
+    let y_dots = (visible_rect.min.y / dot_step) as i32..=(visible_rect.max.y / dot_step) as i32;
+    let x_start = half_size.x - camera_pos.x;
+    let y_start = half_size.y - camera_pos.y;
+    for x_dot in x_dots {
+        for y_dot in y_dots.clone() {
+            let x = x_start + x_dot as f32 * dot_step;
+            let y = y_start + y_dot as f32 * dot_step;
+            let r = egui::Rect::from_center_size([x, y].into(), [1.0; 2].into());
+            let color = vis.bg_stroke.color;
+            let stroke = egui::Stroke {
+                width: 0.0,
+                ..vis.bg_stroke
+            };
+            ui.painter()
+                .rect(r, 0.0, color, stroke, egui::StrokeKind::Inside);
+        }
+    }
+}
+
 // Paint the background rect.
-fn paint_background(full_rect: egui::Rect, ui: &mut egui::Ui) {
+fn paint_background(graph_rect: egui::Rect, ui: &mut egui::Ui) {
     let vis = ui.style().noninteractive();
     let stroke = egui::Stroke {
         width: 0.0,
         ..vis.bg_stroke
     };
     let fill = vis.bg_fill;
-    ui.painter().rect(full_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
+    ui.painter()
+        .rect(graph_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
 }
 
 /// Paint the selection area rectangle.
@@ -763,7 +773,8 @@ fn paint_selection_area(sel_rect: egui::Rect, ui: &mut egui::Ui) {
     let fill = color.linear_multiply(0.125);
     let width = 1.0;
     let stroke = egui::Stroke { width, color };
-    ui.painter().rect(sel_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
+    ui.painter()
+        .rect(sel_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
 }
 
 /// Combines the given id src with the `TypeId` of the `Graph` to produce a unique `egui::Id`.
