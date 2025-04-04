@@ -99,9 +99,11 @@ struct PressedNode {
 /// Configuration for the graph.
 // TODO: Consider storing this in graph widget "memory"?
 // The thing is, it might be nice to let the user modify these externally.
-#[derive(Default, Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct View {
+    /// The visible area of the graph's [`Scene`][egui::containers::Scene].
+    pub scene_rect: egui::Rect,
     pub camera: Camera,
     pub layout: Layout,
 }
@@ -118,7 +120,7 @@ pub struct Camera {
 }
 
 /// The context returned by the `Graph` widget. Allows for setting nodes and edges.
-pub struct Show {
+pub struct Show<'a> {
     /// Useful for accessing the `GraphTempMemory`.
     graph_id: egui::Id,
     /// The full area covered by the `Graph` within the UI.
@@ -134,9 +136,8 @@ pub struct Show {
     /// Track all nodes that were visited this update.
     ///
     /// We will use this to remove old node state on `drop`.
-    visited: HashSet<egui::Id>,
-    /// The child UI of the `Graph` widget for instantiating nodes and edges.
-    ui: egui::Ui,
+    visited: &'a mut HashSet<egui::Id>,
+    view: &'a mut View,
 }
 
 /// Information about the inputs and outputs for a particular node.
@@ -163,6 +164,7 @@ pub struct NodesCtx<'a> {
     select: bool,
     socket_press_released: Option<node::Socket>,
     visited: &'a mut HashSet<egui::Id>,
+    view: &'a mut View,
 }
 
 /// A context to assist with the instantiation of edge widgets.
@@ -198,7 +200,12 @@ impl Graph {
     }
 
     /// Begin showing the parts of the Graph.
-    pub fn show(self, view: &mut View, ui: &mut egui::Ui) -> Show {
+    pub fn show(
+        self,
+        view: &mut View,
+        ui: &mut egui::Ui,
+        content: impl FnOnce(&mut egui::Ui, Show),
+    ) {
         // The full area to be occuppied by the graph.
         let graph_rect = ui.available_rect_before_wrap();
 
@@ -300,16 +307,25 @@ impl Graph {
         });
         ui.set_clip_rect(graph_rect);
 
-        Show {
+        let mut visited = HashSet::default();
+
+        let show = Show {
             graph_id: self.id,
             graph_rect,
             visible_rect,
             selection_rect,
             select,
             socket_press_released,
-            visited: Default::default(),
-            ui,
-        }
+            visited: &mut visited,
+            view,
+        };
+
+        // Drop the lock before running the content.
+        std::mem::drop(gmem);
+
+        content(&mut ui, show);
+
+        prune_unused_nodes(self.id, &visited, &mut ui);
     }
 }
 
@@ -373,9 +389,9 @@ impl NodeSockets {
     }
 }
 
-impl Show {
+impl<'a> Show<'a> {
     /// Instantiate the nodes of the graph.
-    pub fn nodes(mut self, content: impl FnOnce(&mut NodesCtx, &mut egui::Ui)) -> Self {
+    pub fn nodes(mut self, ui: &mut egui::Ui, content: impl FnOnce(&mut NodesCtx, &mut egui::Ui)) -> Self {
         {
             let Self {
                 graph_id,
@@ -384,7 +400,7 @@ impl Show {
                 select,
                 socket_press_released,
                 ref mut visited,
-                ref mut ui,
+                ref mut view,
                 ..
             } = self;
             let mut ctx = NodesCtx {
@@ -393,7 +409,8 @@ impl Show {
                 selection_rect,
                 select,
                 socket_press_released,
-                visited,
+                visited: &mut *visited,
+                view: &mut *view,
             };
             content(&mut ctx, ui);
         }
@@ -401,13 +418,12 @@ impl Show {
     }
 
     /// Instantiate the edges of the graph.
-    pub fn edges(mut self, content: impl FnOnce(&mut EdgesCtx, &mut egui::Ui)) -> Self {
+    pub fn edges(self, ui: &mut egui::Ui, content: impl FnOnce(&mut EdgesCtx, &mut egui::Ui)) -> Self {
         {
             let Self {
                 graph_rect,
                 visible_rect,
                 graph_id,
-                ref mut ui,
                 ..
             } = self;
             let mut ctx = EdgesCtx {
@@ -419,37 +435,35 @@ impl Show {
         }
         self
     }
+}
 
-    /// If a node didn't appear this update, it's likely because the user has removed the node from
-    /// their graph, so we should stop tracking it.
-    fn prune_unused_nodes(&mut self) {
-        let Self {
-            graph_id,
-            ref visited,
-            ref mut ui,
-            ..
-        } = *self;
-        let gmem_arc = memory(ui, graph_id);
-        let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
-        gmem.node_sizes.retain(|k, _| visited.contains(k));
-        gmem.selection.nodes.retain(|k| visited.contains(k));
-        if let Some(socket) = gmem.closest_socket.as_ref() {
-            if !visited.contains(&socket.node) {
-                gmem.closest_socket = None;
-            }
+/// If a node didn't appear this update, it's likely because the user has
+/// removed the node from their graph, so we should stop tracking it.
+fn prune_unused_nodes(
+    graph_id: egui::Id,
+    visited: &HashSet<egui::Id>,
+    ui: &mut egui::Ui,
+) {
+    let gmem_arc = memory(ui, graph_id);
+    let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
+    gmem.node_sizes.retain(|k, _| visited.contains(k));
+    gmem.selection.nodes.retain(|k| visited.contains(k));
+    if let Some(socket) = gmem.closest_socket.as_ref() {
+        if !visited.contains(&socket.node) {
+            gmem.closest_socket = None;
         }
-        if let Some(pressed) = gmem.pressed.as_ref() {
-            match pressed.action {
-                PressAction::DragNodes {
-                    node: Some(PressedNode { id: n, .. }),
-                }
-                | PressAction::Socket(node::Socket { node: n, .. })
-                    if !visited.contains(&n) =>
-                {
-                    gmem.pressed = None
-                }
-                _ => (),
+    }
+    if let Some(pressed) = gmem.pressed.as_ref() {
+        match pressed.action {
+            PressAction::DragNodes {
+                node: Some(PressedNode { id: n, .. }),
             }
+            | PressAction::Socket(node::Socket { node: n, .. })
+                if !visited.contains(&n) =>
+            {
+                gmem.pressed = None
+            }
+            _ => (),
         }
     }
 }
@@ -563,9 +577,13 @@ impl EdgeInProgress {
     }
 }
 
-impl Drop for Show {
-    fn drop(&mut self) {
-        self.prune_unused_nodes();
+impl Default for View {
+    fn default() -> Self {
+        Self {
+            scene_rect: egui::Rect::ZERO,
+            camera: Default::default(),
+            layout: Default::default(),
+        }
     }
 }
 
