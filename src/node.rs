@@ -154,38 +154,31 @@ impl Node {
     /// Present the `Node`'s `Window` and add the given contents.
     pub fn show(
         self,
-        view: &mut crate::View,
         ctx: &mut NodesCtx,
         ui: &mut egui::Ui,
         content: impl FnOnce(&mut egui::Ui),
     ) -> NodeResponse {
-        self.show_impl(view, ctx, ui, Box::new(content) as Box<_>)
+        self.show_impl(ctx, ui, Box::new(content) as Box<_>)
     }
 
     fn show_impl<'a>(
         self,
-        view: &mut crate::View,
         ctx: &mut NodesCtx,
         ui: &mut egui::Ui,
         content: Box<dyn FnOnce(&mut egui::Ui) + 'a>,
     ) -> NodeResponse {
-        let crate::View {
-            ref mut layout,
-            ref camera,
-        } = *view;
+        let layout = &mut ctx.layout;
 
         // Indicate that we've visited this node this update.
         ctx.visited.insert(self.id);
-
         // Determine the current position of the window relative to the graph origin.
         let target_pos_graph = layout.entry(self.id).or_insert_with(|| {
             // If the mouse is over the graph, add the node under the mouse.
             // Otherwise, add the node to the top-left.
-            let mut pos = camera.pos - ctx.graph_rect.center() + ui.spacing().item_spacing;
+            let mut pos = ctx.graph_rect.center();
             if ui.rect_contains_pointer(ctx.graph_rect) {
                 ui.input(|i| i.pointer.hover_pos()).map(|ptr| {
-                    pos = ptr - ctx.graph_rect.center() + camera.pos.to_vec2()
-                        - ui.spacing().interact_size * 0.5;
+                    pos = ptr;
                 });
             }
             egui::Pos2::new(pos.x, pos.y)
@@ -202,7 +195,7 @@ impl Node {
         };
 
         // Translate the graph position to a position within the UI.
-        let pos_screen = camera.graph_to_screen(ctx.graph_rect, pos_graph);
+        let pos_screen = pos_graph;
 
         // The window should always be at least the interaction size.
         let min_item_spacing = ui.spacing().item_spacing.x.min(ui.spacing().item_spacing.y);
@@ -339,7 +332,7 @@ impl Node {
                     // We must initialize gmem.pressed here so that subsequent drag updates work correctly.
                     if gmem.pressed.is_none() {
                         let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
-                        let ptr_graph = view.camera.screen_to_graph(ctx.graph_rect, ptr_screen);
+                        let ptr_graph = ptr_screen;
                         gmem.pressed = Some(crate::Pressed {
                             over_selection_at_origin: true,
                             origin_pos: ptr_graph,

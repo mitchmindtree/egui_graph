@@ -13,11 +13,11 @@ fn main() -> Result<(), eframe::Error> {
 
 struct App {
     state: State,
+    view: egui_graph::View,
 }
 
 struct State {
     graph: Graph,
-    view: egui_graph::View,
     interaction: Interaction,
     flow: egui::Direction,
     socket_radius: f32,
@@ -63,7 +63,6 @@ impl App {
         let graph = new_graph();
         let state = State {
             graph,
-            view: Default::default(),
             interaction: Default::default(),
             socket_color: ctx.style().visuals.weak_text_color(),
             socket_radius: 3.0,
@@ -74,15 +73,16 @@ impl App {
             node_spacing: [1.0, 1.0],
             node_id_map: Default::default(),
         };
-        App { state }
+        let view = Default::default();
+        App { view, state }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        gui(ctx, &mut self.state);
+        gui(ctx, &mut self.view, &mut self.state);
         if self.state.auto_layout {
-            self.state.view.layout = layout(
+            self.view.layout = layout(
                 &self.state.graph,
                 self.state.flow,
                 self.state.node_spacing,
@@ -144,20 +144,20 @@ fn layout(
     })
 }
 
-fn gui(ctx: &egui::Context, state: &mut State) {
+fn gui(ctx: &egui::Context, view: &mut egui_graph::View, state: &mut State) {
     egui::containers::CentralPanel::default()
         .frame(egui::Frame::default())
         .show(ctx, |ui| {
-            graph_config(ui, state);
-            graph(ui, state);
+            graph_config(ui, view, state);
+            graph(ui, view, state);
         });
 }
 
-fn graph(ui: &mut egui::Ui, state: &mut State) {
-    egui_graph::Graph::new("Demo Graph")
-        .show(&mut state.view, ui)
-        .nodes(|nctx, ui| nodes(nctx, ui, state))
-        .edges(|ectx, ui| edges(ectx, ui, state));
+fn graph(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut State) {
+    egui_graph::Graph::new("Demo Graph").show(view, ui, |ui, show| {
+        show.nodes(ui, |nctx, ui| nodes(nctx, ui, state))
+            .edges(ui, |ectx, ui| edges(ectx, ui, state));
+    });
 }
 
 fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) {
@@ -172,7 +172,6 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             .edges_directed(n, petgraph::Outgoing)
             .fold(0, |max, e| std::cmp::max(max, e.weight().0 + 1));
         let node = &mut state.graph[n];
-        let graph_view = &mut state.view;
         let egui_id = egui::Id::new(n);
         state.node_id_map.insert(egui_id, n);
         let response = egui_graph::node::Node::from_id(egui_id)
@@ -181,7 +180,7 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             .flow(state.flow)
             .socket_radius(state.socket_radius)
             .socket_color(state.socket_color)
-            .show(graph_view, nctx, ui, |ui| match node.kind {
+            .show(nctx, ui, |ui| match node.kind {
                 NodeKind::Label => {
                     ui.label(&node.name);
                 }
@@ -215,7 +214,6 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
 
             // Check for an edge event.
             if let Some(ev) = response.edge_event() {
-                dbg!(&ev);
                 match ev {
                     EdgeEvent::Started { kind, index } => {
                         state.interaction.edge_in_progress = Some((n, kind, index));
@@ -326,7 +324,7 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
     }
 }
 
-fn graph_config(ui: &mut egui::Ui, state: &mut State) {
+fn graph_config(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut State) {
     let mut frame = egui::Frame::window(ui.style());
     frame.shadow.spread = 0;
     frame.shadow.offset = [0, 0];
@@ -346,7 +344,7 @@ fn graph_config(ui: &mut egui::Ui, state: &mut State) {
                 ui.separator();
                 ui.add_enabled_ui(!state.auto_layout, |ui| {
                     if ui.button("Layout Once").clicked() {
-                        state.view.layout =
+                        view.layout =
                             layout(&state.graph, state.flow, state.node_spacing, ui.ctx());
                     }
                 });
