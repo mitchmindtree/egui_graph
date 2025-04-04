@@ -418,14 +418,7 @@ impl Graph {
 
         // Paint the background rect.
         if self.background {
-            let vis = ui.style().noninteractive();
-            let stroke = egui::Stroke {
-                width: 0.0,
-                ..vis.bg_stroke
-            };
-            let fill = vis.bg_fill;
-            ui.painter()
-                .rect(full_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
+            paint_background(full_rect, ui);
         }
 
         // Paint some subtle dots to check camera movement.
@@ -739,6 +732,17 @@ impl Drop for Show {
     fn drop(&mut self) {
         self.prune_unused_nodes();
     }
+}
+
+// Paint the background rect.
+fn paint_background(full_rect: egui::Rect, ui: &mut egui::Ui) {
+    let vis = ui.style().noninteractive();
+    let stroke = egui::Stroke {
+        width: 0.0,
+        ..vis.bg_stroke
+    };
+    let fill = vis.bg_fill;
+    ui.painter().rect(full_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
 }
 
 /// Combines the given id src with the `TypeId` of the `Graph` to produce a unique `egui::Id`.
