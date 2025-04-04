@@ -23,7 +23,7 @@ pub struct GraphTempMemory {
     ///
     /// Primarily used to check for node selection, as we don't know the size of the node until the
     /// contents have been instantiated.
-    node_sizes: HashMap<egui::Id, egui::Vec2>,
+    node_sizes: NodeSizes,
     /// The currently selected nodes and edges.
     selection: Selection,
     /// Whether or not the primary button was pressed on the graph area and is still down.
@@ -39,6 +39,8 @@ pub struct GraphTempMemory {
     /// Always `Some` while the pointer is over the graph area, `None` otherwise.
     closest_socket: Option<node::Socket>,
 }
+
+type NodeSizes = HashMap<egui::Id, egui::Vec2>;
 
 #[derive(Clone, Default)]
 struct Selection {
