@@ -181,10 +181,10 @@ impl Node {
         let target_pos_graph = layout.entry(self.id).or_insert_with(|| {
             // If the mouse is over the graph, add the node under the mouse.
             // Otherwise, add the node to the top-left.
-            let mut pos = camera.pos - ctx.full_rect.center() + ui.spacing().item_spacing;
-            if ui.rect_contains_pointer(ctx.full_rect) {
+            let mut pos = camera.pos - ctx.graph_rect.center() + ui.spacing().item_spacing;
+            if ui.rect_contains_pointer(ctx.graph_rect) {
                 ui.input(|i| i.pointer.hover_pos()).map(|ptr| {
-                    pos = ptr - ctx.full_rect.center() + camera.pos.to_vec2()
+                    pos = ptr - ctx.graph_rect.center() + camera.pos.to_vec2()
                         - ui.spacing().interact_size * 0.5;
                 });
             }
@@ -202,7 +202,7 @@ impl Node {
         };
 
         // Translate the graph position to a position within the UI.
-        let pos_screen = camera.graph_to_screen(ctx.full_rect, pos_graph);
+        let pos_screen = camera.graph_to_screen(ctx.graph_rect, pos_graph);
 
         // The window should always be at least the interaction size.
         let min_item_spacing = ui.spacing().item_spacing.x.min(ui.spacing().item_spacing.y);
@@ -233,7 +233,7 @@ impl Node {
         let mut frame = self.frame.unwrap_or_else(|| default_frame(ui.style()));
 
         let max_w = self.max_width.unwrap_or(ui.spacing().text_edit_width);
-        let max_size = egui::Vec2::new(max_w, ctx.full_rect.height());
+        let max_size = egui::Vec2::new(max_w, ctx.graph_rect.height());
 
         // Track changes in selection for the node response.
         let mut selection_changed = false;
@@ -339,7 +339,7 @@ impl Node {
                     // We must initialize gmem.pressed here so that subsequent drag updates work correctly.
                     if gmem.pressed.is_none() {
                         let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
-                        let ptr_graph = view.camera.screen_to_graph(ctx.full_rect, ptr_screen);
+                        let ptr_graph = view.camera.screen_to_graph(ctx.graph_rect, ptr_screen);
                         gmem.pressed = Some(crate::Pressed {
                             over_selection_at_origin: true,
                             origin_pos: ptr_graph,

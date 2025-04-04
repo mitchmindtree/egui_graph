@@ -23,7 +23,7 @@ pub struct GraphTempMemory {
     ///
     /// Primarily used to check for node selection, as we don't know the size of the node until the
     /// contents have been instantiated.
-    node_sizes: HashMap<egui::Id, egui::Vec2>,
+    node_sizes: NodeSizes,
     /// The currently selected nodes and edges.
     selection: Selection,
     /// Whether or not the primary button was pressed on the graph area and is still down.
@@ -39,6 +39,8 @@ pub struct GraphTempMemory {
     /// Always `Some` while the pointer is over the graph area, `None` otherwise.
     closest_socket: Option<node::Socket>,
 }
+
+type NodeSizes = HashMap<egui::Id, egui::Vec2>;
 
 #[derive(Clone, Default)]
 struct Selection {
@@ -120,7 +122,7 @@ pub struct Show {
     /// Useful for accessing the `GraphTempMemory`.
     graph_id: egui::Id,
     /// The full area covered by the `Graph` within the UI.
-    full_rect: egui::Rect,
+    graph_rect: egui::Rect,
     /// The visible area of the graph's canvas.
     visible_rect: egui::Rect,
     /// If a selection is being performed with the mouse, this is the covered area.
@@ -156,7 +158,7 @@ pub struct Sockets {
 /// A context to assist with the instantiation of node widgets.
 pub struct NodesCtx<'a> {
     pub graph_id: egui::Id,
-    full_rect: egui::Rect,
+    graph_rect: egui::Rect,
     selection_rect: Option<egui::Rect>,
     select: bool,
     socket_press_released: Option<node::Socket>,
@@ -166,8 +168,18 @@ pub struct NodesCtx<'a> {
 /// A context to assist with the instantiation of edge widgets.
 pub struct EdgesCtx {
     graph_id: egui::Id,
-    full_rect: egui::Rect,
+    graph_rect: egui::Rect,
     visible_rect: egui::Rect,
+}
+
+/// The set of detected graph interaction for a single graph widget update prior
+/// to node interaction.
+struct GraphInteraction {
+    pressed: Option<Pressed>,
+    socket_press_released: Option<node::Socket>,
+    select: bool,
+    selection_rect: Option<egui::Rect>,
+    drag_nodes_delta: egui::Vec2,
 }
 
 impl Graph {
@@ -188,8 +200,7 @@ impl Graph {
     /// Begin showing the parts of the Graph.
     pub fn show(self, view: &mut View, ui: &mut egui::Ui) -> Show {
         // The full area to be occuppied by the graph.
-        let full_rect = ui.available_rect_before_wrap();
-        let half_size = full_rect.size() * 0.5;
+        let graph_rect = ui.available_rect_before_wrap();
 
         // Draw the selection rectangle if there is one.
         let mut selection_rect = None;
@@ -197,7 +208,7 @@ impl Graph {
         let mut socket_press_released = None;
 
         let ptr_in_use = ui.ctx().is_using_pointer();
-        let ptr_on_graph = ui.rect_contains_pointer(full_rect);
+        let ptr_on_graph = ui.rect_contains_pointer(graph_rect);
 
         // Check for selection rectangle and node dragging.
         let gmem_arc = memory(ui, self.id);
@@ -205,202 +216,54 @@ impl Graph {
         let pointer = ui.input(|i| i.pointer.clone());
         if let Some(ptr_screen) = pointer.interact_pos().or(pointer.hover_pos()) {
             // The location of the pointer over the graph.
-            let ptr_graph = view.camera.screen_to_graph(full_rect, ptr_screen);
+            let ptr_graph = view.camera.screen_to_graph(graph_rect, ptr_screen);
+
             // Check for the closest socket.
-            // TODO: if we wanted to be super efficient, we could maintain a quadtree of nodes
-            // and sockets...
-            let mut closest_socket = None;
-            if ptr_on_graph {
-                let socket_radius = ui
-                    .spacing()
-                    .interact_size
-                    .x
-                    .min(ui.spacing().interact_size.y);
-                let socket_radius_sq = socket_radius * socket_radius;
-                for (&n_id, &n_graph) in &view.layout {
-                    // Only check visible nodes.
-                    let n_screen = view.camera.graph_to_screen(full_rect, n_graph);
-                    let size = match gmem.node_sizes.get(&n_id) {
-                        None => continue,
-                        Some(&size) => size,
-                    };
-                    let rect = egui::Rect::from_min_size(n_screen, size);
-                    if !full_rect.intersects(rect) {
-                        continue;
-                    }
-                    let sockets = match gmem.sockets.get(&n_id) {
-                        None => continue,
-                        Some(sockets) => sockets,
-                    };
+            let closest_socket = match ptr_on_graph {
+                true => find_closest_socket(ptr_screen, graph_rect, view, &gmem, ui)
+                    .map(|(socket, _dist_sqrd)| socket),
+                false => None,
+            };
 
-                    // Check inputs.
-                    for (ix, (p, _)) in sockets.inputs().enumerate() {
-                        let dist_sq = ptr_screen.distance_sq(p);
-                        if dist_sq < socket_radius_sq {
-                            let socket = node::Socket {
-                                node: n_id,
-                                kind: node::SocketKind::Input,
-                                index: ix,
-                            };
-                            closest_socket = match closest_socket {
-                                None => Some((socket, dist_sq)),
-                                Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
-                                _ => closest_socket,
-                            }
-                        }
-                    }
+            // Check for graph interactions.
+            let interaction = graph_interaction(
+                graph_rect,
+                &gmem.node_sizes,
+                &gmem.selection,
+                &*view,
+                &pointer,
+                closest_socket,
+                ptr_in_use,
+                ptr_on_graph,
+                ptr_screen,
+                ptr_graph,
+                gmem.pressed.as_ref(),
+                ui,
+            );
 
-                    // Check outputs.
-                    for (ix, (p, _)) in sockets.outputs().enumerate() {
-                        let dist_sq = ptr_screen.distance_sq(p);
-                        if dist_sq < socket_radius_sq {
-                            let socket = node::Socket {
-                                node: n_id,
-                                kind: node::SocketKind::Output,
-                                index: ix,
-                            };
-                            closest_socket = match closest_socket {
-                                None => Some((socket, dist_sq)),
-                                Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
-                                _ => closest_socket,
-                            }
-                        }
-                    }
-                }
-            }
-
-            gmem.closest_socket = closest_socket.map(|(socket, _)| socket);
-
-            // Check for selecting/dragging.
-            if let Some(pressed) = gmem.pressed.as_mut() {
-                pressed.current_pos = ptr_graph;
-                match pressed.action {
-                    PressAction::DragNodes {
-                        node: Some(ref node),
-                    } => {
-                        // Determine the drag delta.
-                        let delta = ptr_graph - pressed.origin_pos;
-                        let target = node.position_at_origin + delta;
-                        let mut drag_delta = egui::Vec2::ZERO;
-                        if let Some(current) = view.layout.get(&node.id) {
-                            drag_delta = target - *current;
-                        }
-                        // Apply drag delta to all selected nodes.
+            // Apply drag delta to all selected nodes.
+            if interaction.drag_nodes_delta != egui::Vec2::ZERO {
+                if let Some(pressed) = gmem.pressed.as_ref() {
+                    if let PressAction::DragNodes { .. } = pressed.action {
                         for &n_id in &gmem.selection.nodes {
                             if let Some(pos) = view.layout.get_mut(&n_id) {
-                                *pos += drag_delta;
+                                *pos += interaction.drag_nodes_delta;
                             }
                         }
                     }
-                    PressAction::Select => {
-                        let min = view.camera.graph_to_screen(full_rect, pressed.origin_pos);
-                        let max = ptr_screen;
-                        selection_rect = Some(egui::Rect::from_two_pos(min, max));
-                    }
-                    _ => (),
-                }
-
-                // The press action has ended.
-                if pointer.any_released() && !pointer.button_down(egui::PointerButton::Primary) {
-                    match gmem.pressed.take().map(|p| p.action) {
-                        Some(PressAction::Select) => select = true,
-                        Some(PressAction::Socket(socket)) => {
-                            socket_press_released = Some(socket);
-                        }
-                        _ => (),
-                    }
-                }
-
-            // Check for the beginning of a socket press or rectangular selection.
-            } else if !ptr_in_use
-                && ptr_on_graph
-                && pointer.button_down(egui::PointerButton::Primary)
-                && pointer.any_pressed()
-            {
-                // Choose which press action based on whether or not a socket was pressed.
-                let action = match closest_socket {
-                    Some((socket, _)) => PressAction::Socket(socket),
-                    None => {
-                        let min = ptr_screen;
-                        let max = ptr_screen;
-                        selection_rect = Some(egui::Rect::from_two_pos(min, max));
-                        PressAction::Select
-                    }
-                };
-
-                let pressed = Pressed {
-                    over_selection_at_origin: false,
-                    origin_pos: ptr_graph,
-                    current_pos: ptr_graph,
-                    action,
-                };
-                gmem.pressed = Some(pressed);
-
-            // Otherwise, check if we should start dragging nodes.
-            } else if !ptr_in_use
-                && full_rect.contains(ptr_screen)
-                && pointer.button_down(egui::PointerButton::Primary)
-                && pointer.any_pressed()
-            {
-                // Check if the mouse is over a selected node.
-                let mut over_any = false;
-                let mut over_selected = false;
-                let aim_radius = ui.input(|i| i.aim_radius());
-                for (&n_id, &size) in &gmem.node_sizes {
-                    let pos = view.layout.get(&n_id).cloned().unwrap_or(egui::Pos2::ZERO);
-                    let r = egui::Rect::from_min_size(pos, size);
-                    if r.expand(aim_radius).contains(ptr_graph) {
-                        over_any = true;
-                        if gmem.selection.nodes.contains(&n_id) {
-                            over_selected = true;
-                            break;
-                        }
-                    }
-                }
-                if over_any {
-                    let pressed = Pressed {
-                        over_selection_at_origin: over_selected,
-                        origin_pos: ptr_graph,
-                        current_pos: ptr_graph,
-                        action: PressAction::DragNodes { node: None },
-                    };
-                    gmem.pressed = Some(pressed);
                 }
             }
+
+            gmem.pressed = interaction.pressed;
+            gmem.closest_socket = closest_socket;
+            selection_rect = interaction.selection_rect;
+            select = interaction.select;
+            socket_press_released = interaction.socket_press_released;
 
             // If the pointer is down and near an edge of the rect, move the camera in that
             // direction.
-            let move_camera = match gmem.pressed.as_ref() {
-                None => false,
-                Some(p) => {
-                    let action_ok = !matches!(p.action, PressAction::DragNodes { ref node, .. } if node.is_none());
-                    action_ok && p.origin_pos != ptr_graph
-                }
-            };
-            if move_camera {
-                let max_vel = 8.0;
-                let mid = full_rect.center();
-                let move_dist = ui
-                    .spacing()
-                    .interact_size
-                    .x
-                    .max(ui.spacing().interact_size.y);
-                let x_vel = if ptr_screen.x < mid.x {
-                    (ptr_screen.x - (full_rect.min.x + move_dist)).min(0.0) * max_vel / move_dist
-                } else if ptr_screen.x > mid.x {
-                    (ptr_screen.x - (full_rect.max.x - move_dist)).max(0.0) * max_vel / move_dist
-                } else {
-                    0.0
-                };
-                let y_vel = if ptr_screen.y < mid.y {
-                    (ptr_screen.y - (full_rect.min.y + move_dist)).min(0.0) * max_vel / move_dist
-                } else if ptr_screen.y > mid.y {
-                    (ptr_screen.y - (full_rect.max.y - move_dist)).max(0.0) * max_vel / move_dist
-                } else {
-                    0.0
-                };
-                let vel = egui::Vec2::new(x_vel, y_vel);
-                view.camera.pos += vel;
+            if drag_moves_camera(gmem.pressed.as_ref(), ptr_graph) {
+                view.camera.pos += drag_moves_camera_velocity(graph_rect, ptr_screen, ui);
             }
         }
 
@@ -416,63 +279,30 @@ impl Graph {
 
         // Paint the background rect.
         if self.background {
-            let vis = ui.style().noninteractive();
-            let stroke = egui::Stroke {
-                width: 0.0,
-                ..vis.bg_stroke
-            };
-            let fill = vis.bg_fill;
-            ui.painter()
-                .rect(full_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
+            paint_background(graph_rect, ui);
         }
 
         // Paint some subtle dots to check camera movement.
-        let visible_rect = egui::Rect::from_center_size(view.camera.pos, full_rect.size());
-        let dot_step = ui.spacing().interact_size.y;
-        let vis = ui.style().noninteractive();
-        let x_dots =
-            (visible_rect.min.x / dot_step) as i32..=(visible_rect.max.x / dot_step) as i32;
-        let y_dots =
-            (visible_rect.min.y / dot_step) as i32..=(visible_rect.max.y / dot_step) as i32;
-        let x_start = half_size.x - view.camera.pos.x;
-        let y_start = half_size.y - view.camera.pos.y;
-        for x_dot in x_dots {
-            for y_dot in y_dots.clone() {
-                let x = x_start + x_dot as f32 * dot_step;
-                let y = y_start + y_dot as f32 * dot_step;
-                let r = egui::Rect::from_center_size([x, y].into(), [1.0; 2].into());
-                let color = vis.bg_stroke.color;
-                let stroke = egui::Stroke {
-                    width: 0.0,
-                    ..vis.bg_stroke
-                };
-                ui.painter()
-                    .rect(r, 0.0, color, stroke, egui::StrokeKind::Inside);
-            }
-        }
+        let visible_rect = egui::Rect::from_center_size(view.camera.pos, graph_rect.size());
+        paint_dot_grid(graph_rect, visible_rect, view.camera.pos, ui);
 
         // Draw the selection area if there is one.
         // TODO: Do this when `Show` is `drop`ped or finalised.
-        if let Some(r) = selection_rect {
-            let color = ui.visuals().weak_text_color();
-            let fill = color.linear_multiply(0.125);
-            let width = 1.0;
-            let stroke = egui::Stroke { width, color };
-            ui.painter()
-                .rect(r, 0.0, fill, stroke, egui::StrokeKind::Inside);
+        if let Some(sel_rect) = selection_rect {
+            paint_selection_area(sel_rect, ui);
         }
 
         // Create a child UI over the full surface of the graph widget.
         let mut ui = ui.new_child(egui::UiBuilder {
-            max_rect: Some(full_rect),
+            max_rect: Some(graph_rect),
             layout: Some(*ui.layout()),
             ..Default::default()
         });
-        ui.set_clip_rect(full_rect);
+        ui.set_clip_rect(graph_rect);
 
         Show {
             graph_id: self.id,
-            full_rect,
+            graph_rect,
             visible_rect,
             selection_rect,
             select,
@@ -549,7 +379,7 @@ impl Show {
         {
             let Self {
                 graph_id,
-                full_rect,
+                graph_rect,
                 selection_rect,
                 select,
                 socket_press_released,
@@ -559,7 +389,7 @@ impl Show {
             } = self;
             let mut ctx = NodesCtx {
                 graph_id,
-                full_rect,
+                graph_rect,
                 selection_rect,
                 select,
                 socket_press_released,
@@ -574,7 +404,7 @@ impl Show {
     pub fn edges(mut self, content: impl FnOnce(&mut EdgesCtx, &mut egui::Ui)) -> Self {
         {
             let Self {
-                full_rect,
+                graph_rect,
                 visible_rect,
                 graph_id,
                 ref mut ui,
@@ -582,7 +412,7 @@ impl Show {
             } = self;
             let mut ctx = EdgesCtx {
                 graph_id,
-                full_rect,
+                graph_rect,
                 visible_rect,
             };
             content(&mut ctx, ui);
@@ -688,7 +518,7 @@ impl EdgesCtx {
             }
             _ => {
                 let cam_pos = self.visible_rect.center();
-                let pos = graph_to_screen(cam_pos, self.full_rect, pressed.current_pos);
+                let pos = graph_to_screen(cam_pos, self.graph_rect, pressed.current_pos);
                 (pos, None)
             }
         };
@@ -700,8 +530,8 @@ impl EdgesCtx {
     }
 
     /// The full rect occuppied by the graph widget.
-    pub fn full_rect(&self) -> egui::Rect {
-        self.full_rect
+    pub fn graph_rect(&self) -> egui::Rect {
+        self.graph_rect
     }
 }
 
@@ -737,6 +567,301 @@ impl Drop for Show {
     fn drop(&mut self) {
         self.prune_unused_nodes();
     }
+}
+
+/// Find the socket that is closest to the given point.
+///
+/// Returns the socket alongside the squared distance from the socket.
+fn find_closest_socket(
+    pos_screen: egui::Pos2,
+    graph_rect: egui::Rect,
+    view: &View,
+    gmem: &GraphTempMemory,
+    ui: &egui::Ui,
+) -> Option<(node::Socket, f32)> {
+    // TODO: if we wanted to be super efficient, we could maintain a quadtree of
+    // nodes and sockets...
+    let mut closest_socket = None;
+    let socket_radius = ui
+        .spacing()
+        .interact_size
+        .x
+        .min(ui.spacing().interact_size.y);
+    let socket_radius_sq = socket_radius * socket_radius;
+    for (&n_id, &n_graph) in &view.layout {
+        // Only check visible nodes.
+        let n_screen = view.camera.graph_to_screen(graph_rect, n_graph);
+        let size = match gmem.node_sizes.get(&n_id) {
+            None => continue,
+            Some(&size) => size,
+        };
+        let rect = egui::Rect::from_min_size(n_screen, size);
+        if !graph_rect.intersects(rect) {
+            continue;
+        }
+        let sockets = match gmem.sockets.get(&n_id) {
+            None => continue,
+            Some(sockets) => sockets,
+        };
+
+        // Check inputs.
+        for (ix, (p, _)) in sockets.inputs().enumerate() {
+            let dist_sq = pos_screen.distance_sq(p);
+            if dist_sq < socket_radius_sq {
+                let socket = node::Socket {
+                    node: n_id,
+                    kind: node::SocketKind::Input,
+                    index: ix,
+                };
+                closest_socket = match closest_socket {
+                    None => Some((socket, dist_sq)),
+                    Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
+                    _ => closest_socket,
+                }
+            }
+        }
+
+        // Check outputs.
+        for (ix, (p, _)) in sockets.outputs().enumerate() {
+            let dist_sq = pos_screen.distance_sq(p);
+            if dist_sq < socket_radius_sq {
+                let socket = node::Socket {
+                    node: n_id,
+                    kind: node::SocketKind::Output,
+                    index: ix,
+                };
+                closest_socket = match closest_socket {
+                    None => Some((socket, dist_sq)),
+                    Some((_, d_sq)) if dist_sq < d_sq => Some((socket, dist_sq)),
+                    _ => closest_socket,
+                }
+            }
+        }
+    }
+
+    closest_socket
+}
+
+/// Interpret some basic interactions from the state of the graph and recent input.
+fn graph_interaction(
+    graph_rect: egui::Rect,
+    node_sizes: &NodeSizes,
+    selection: &Selection,
+    view: &View,
+    pointer: &egui::PointerState,
+    closest_socket: Option<node::Socket>,
+    ptr_in_use: bool,
+    ptr_on_graph: bool,
+    ptr_screen: egui::Pos2,
+    ptr_graph: egui::Pos2,
+    pressed: Option<&Pressed>,
+    ui: &egui::Ui,
+) -> GraphInteraction {
+    let mut select = false;
+    let mut socket_press_released = None;
+    let mut drag_nodes_delta = egui::Vec2::ZERO;
+    let mut selection_rect = None;
+
+    // Check for selecting/dragging.
+    let pressed: Option<Pressed> = if let Some(pressed) = pressed {
+        match pressed.action {
+            PressAction::DragNodes {
+                node: Some(ref node),
+            } => {
+                // Determine the drag delta.
+                let delta = ptr_graph - pressed.origin_pos;
+                let target = node.position_at_origin + delta;
+                if let Some(current) = view.layout.get(&node.id) {
+                    drag_nodes_delta = target - *current;
+                }
+            }
+            PressAction::Select => {
+                let min = view.camera.graph_to_screen(graph_rect, pressed.origin_pos);
+                let max = ptr_screen;
+                selection_rect = Some(egui::Rect::from_two_pos(min, max));
+            }
+            _ => (),
+        }
+
+        // The press action has ended.
+        if pointer.any_released() && !pointer.button_down(egui::PointerButton::Primary) {
+            match pressed.action {
+                PressAction::Select => select = true,
+                PressAction::Socket(socket) => socket_press_released = Some(socket),
+                _ => (),
+            }
+            None
+        } else {
+            Some(Pressed {
+                current_pos: ptr_graph,
+                ..pressed.clone()
+            })
+        }
+    // Check for the beginning of a socket press or rectangular selection.
+    } else if !ptr_in_use
+        && ptr_on_graph
+        && pointer.button_down(egui::PointerButton::Primary)
+        && pointer.any_pressed()
+    {
+        // Choose which press action based on whether or not a socket was pressed.
+        let action = match closest_socket {
+            Some(socket) => PressAction::Socket(socket),
+            None => {
+                let min = ptr_screen;
+                let max = ptr_screen;
+                selection_rect = Some(egui::Rect::from_two_pos(min, max));
+                PressAction::Select
+            }
+        };
+
+        let pressed = Pressed {
+            over_selection_at_origin: false,
+            origin_pos: ptr_graph,
+            current_pos: ptr_graph,
+            action,
+        };
+        Some(pressed)
+
+    // Otherwise, check if we should start dragging nodes.
+    } else if !ptr_in_use
+        && graph_rect.contains(ptr_screen)
+        && pointer.button_down(egui::PointerButton::Primary)
+        && pointer.any_pressed()
+    {
+        // Check if the mouse is over a selected node.
+        let mut over_any = false;
+        let mut over_selected = false;
+        let aim_radius = ui.input(|i| i.aim_radius());
+        for (&n_id, &size) in node_sizes {
+            let pos = view.layout.get(&n_id).cloned().unwrap_or(egui::Pos2::ZERO);
+            let r = egui::Rect::from_min_size(pos, size);
+            if r.expand(aim_radius).contains(ptr_graph) {
+                over_any = true;
+                if selection.nodes.contains(&n_id) {
+                    over_selected = true;
+                    break;
+                }
+            }
+        }
+        if over_any {
+            Some(Pressed {
+                over_selection_at_origin: over_selected,
+                origin_pos: ptr_graph,
+                current_pos: ptr_graph,
+                action: PressAction::DragNodes { node: None },
+            })
+        } else {
+            pressed.cloned()
+        }
+
+    // Otherwise, pass through existing state.
+    } else {
+        pressed.cloned()
+    };
+
+    GraphInteraction {
+        pressed,
+        socket_press_released,
+        select,
+        selection_rect,
+        drag_nodes_delta,
+    }
+}
+
+/// Whether or not the given `Pressed` state implies that the camera should move
+/// due to the pointer being down near the edge of the rect.
+fn drag_moves_camera(pressed: Option<&Pressed>, ptr_graph: egui::Pos2) -> bool {
+    match pressed.as_ref() {
+        None => false,
+        Some(p) => {
+            let action_ok =
+                !matches!(p.action, PressAction::DragNodes { ref node, .. } if node.is_none());
+            action_ok && p.origin_pos != ptr_graph
+        }
+    }
+}
+
+/// The velocity of the camera movement caused by dragging near the edge of
+/// the rect.
+fn drag_moves_camera_velocity(
+    graph_rect: egui::Rect,
+    ptr_screen: egui::Pos2,
+    ui: &egui::Ui,
+) -> egui::Vec2 {
+    let max_vel = 8.0;
+    let mid = graph_rect.center();
+    let move_dist = ui
+        .spacing()
+        .interact_size
+        .x
+        .max(ui.spacing().interact_size.y);
+    let x_vel = if ptr_screen.x < mid.x {
+        (ptr_screen.x - (graph_rect.min.x + move_dist)).min(0.0) * max_vel / move_dist
+    } else if ptr_screen.x > mid.x {
+        (ptr_screen.x - (graph_rect.max.x - move_dist)).max(0.0) * max_vel / move_dist
+    } else {
+        0.0
+    };
+    let y_vel = if ptr_screen.y < mid.y {
+        (ptr_screen.y - (graph_rect.min.y + move_dist)).min(0.0) * max_vel / move_dist
+    } else if ptr_screen.y > mid.y {
+        (ptr_screen.y - (graph_rect.max.y - move_dist)).max(0.0) * max_vel / move_dist
+    } else {
+        0.0
+    };
+    egui::Vec2::new(x_vel, y_vel)
+}
+
+// Paint a subtle dot grid to check camera movement.
+fn paint_dot_grid(
+    graph_rect: egui::Rect,
+    visible_rect: egui::Rect,
+    camera_pos: egui::Pos2,
+    ui: &mut egui::Ui,
+) {
+    let half_size = graph_rect.size() * 0.5;
+    let dot_step = ui.spacing().interact_size.y;
+    let vis = ui.style().noninteractive();
+    let x_dots = (visible_rect.min.x / dot_step) as i32..=(visible_rect.max.x / dot_step) as i32;
+    let y_dots = (visible_rect.min.y / dot_step) as i32..=(visible_rect.max.y / dot_step) as i32;
+    let x_start = half_size.x - camera_pos.x;
+    let y_start = half_size.y - camera_pos.y;
+    for x_dot in x_dots {
+        for y_dot in y_dots.clone() {
+            let x = x_start + x_dot as f32 * dot_step;
+            let y = y_start + y_dot as f32 * dot_step;
+            let r = egui::Rect::from_center_size([x, y].into(), [1.0; 2].into());
+            let color = vis.bg_stroke.color;
+            let stroke = egui::Stroke {
+                width: 0.0,
+                ..vis.bg_stroke
+            };
+            ui.painter()
+                .rect(r, 0.0, color, stroke, egui::StrokeKind::Inside);
+        }
+    }
+}
+
+// Paint the background rect.
+fn paint_background(graph_rect: egui::Rect, ui: &mut egui::Ui) {
+    let vis = ui.style().noninteractive();
+    let stroke = egui::Stroke {
+        width: 0.0,
+        ..vis.bg_stroke
+    };
+    let fill = vis.bg_fill;
+    ui.painter()
+        .rect(graph_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
+}
+
+/// Paint the selection area rectangle.
+fn paint_selection_area(sel_rect: egui::Rect, ui: &mut egui::Ui) {
+    let color = ui.visuals().weak_text_color();
+    let fill = color.linear_multiply(0.125);
+    let width = 1.0;
+    let stroke = egui::Stroke { width, color };
+    ui.painter()
+        .rect(sel_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
 }
 
 /// Combines the given id src with the `TypeId` of the `Graph` to produce a unique `egui::Id`.
