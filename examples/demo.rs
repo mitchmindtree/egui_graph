@@ -376,5 +376,6 @@ fn graph_config(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut Stat
                 ui.label("Socket color:");
                 ui.color_edit_button_srgba(&mut state.socket_color);
             });
+            ui.label(format!("Scene: {:?}", view.scene_rect));
         });
 }

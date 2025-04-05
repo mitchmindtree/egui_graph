@@ -205,9 +205,8 @@ impl Graph {
             ref mut layout,
         } = *view;
 
-        let visible_rect = *scene_rect;
-        println!("before: {:?}", *scene_rect);
-        egui::containers::Scene::new().show(ui, scene_rect, |ui| {
+        // TODO: make zoom_range a graph argument.
+        egui::containers::Scene::new().zoom_range(0.5..=2.0).show(ui, scene_rect, |ui| {
             // Draw the selection rectangle if there is one.
             let mut selection_rect = None;
             let mut select = false;
@@ -266,31 +265,16 @@ impl Graph {
                 selection_rect = interaction.selection_rect;
                 select = interaction.select;
                 socket_press_released = interaction.socket_press_released;
-
-                // If the pointer is down and near an edge of the rect, move the camera in that
-                // direction.
-                // if drag_moves_camera(gmem.pressed.as_ref(), ptr_graph) {
-                //     camera.pos += drag_moves_camera_velocity(graph_rect, ptr_screen, ui);
-                // }
             }
 
-            // // Check if we should drag or scroll the camera position.
-            // if !ptr_in_use && ptr_on_graph {
-            //     ui.input(|i| {
-            //         // Middle mouse button moves camera.
-            //         if i.pointer.is_moving() && i.pointer.button_down(egui::PointerButton::Middle) {
-            //             camera.pos -= pointer.delta();
-            //         }
-            //     });
-            // }
-
             // Paint the background rect.
+            let visible_rect = ui.clip_rect();
             if self.background {
-                paint_background(graph_rect, ui);
+                paint_background(visible_rect, ui);
             }
 
             // Paint some subtle dots to check camera movement.
-            paint_dot_grid(graph_rect, ui);
+            paint_dot_grid(visible_rect, ui);
 
             // Draw the selection area if there is one.
             // TODO: Do this when `Show` is `drop`ped or finalised.
@@ -318,7 +302,6 @@ impl Graph {
 
             prune_unused_nodes(self.id, &visited, ui);
         });
-        println!("after: {:?}", *scene_rect);
     }
 }
 

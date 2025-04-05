@@ -277,33 +277,30 @@ impl Node {
             frame.stroke.color = color;
         }
 
-        let mut response = egui::Window::new("")
-            .id(self.id)
-            .frame(frame)
-            .resizable(false)
-            .movable(false)
-            // TODO: These `min_*` and `default_size` methods seem to be totally ignored? Should
-            // fix this upstream, but for now we just set min size on the window's `Ui` instead.
-            .min_width(min_size.x)
-            .min_height(min_size.y)
-            .default_size(min_size)
-            // TODO: Only `max_size` seems to be considered here - `min_size` seems to be ignored.
-            .resize(|resize| resize.max_size(max_size).min_size(min_size))
-            .current_pos(pos_screen)
-            .collapsible(false)
-            .title_bar(false)
-            .auto_sized()
-            .constrain_to(egui::Rect::EVERYTHING)
-            .show(ui.ctx(), move |ui| {
-                // Ensure the ui is at least large enough to provide space for inputs/outputs.
-                let gap = egui::Vec2::splat(win_corner_radius * 2.0);
-                let min_size = min_size - gap;
-                ui.set_min_size(min_size);
-                // Set the user's content.
-                content(ui);
+        // Custom framed node container that remains in the scene's layer
+        let put_size = egui::Vec2::new(max_size.x, min_size.y);
+        let put_rect = egui::Rect::from_min_size(pos_screen, put_size);
+        let mut response = ui
+            .put(put_rect, |ui: &mut egui::Ui| -> egui::Response {
+                frame
+                    .show(ui, |ui| {
+                        // Ensure the ui is at least large enough to provide space
+                        // for inputs/outputs.
+                        let gap = egui::Vec2::splat(win_corner_radius * 2.0);
+                        let min_size = min_size - gap;
+                        ui.set_min_size(min_size);
+
+                        // Set the user's content.
+                        content(ui);
+                    })
+                    .response
             })
-            .expect("node windows are always open")
-            .response;
+            // FIXME: This is a hack - we should be `Sense`ing at widget
+            // instantiation, otherwise this will override click and drag
+            // interaction of any child widgets. The proper solution is likely to
+            // allocate a response at the start of the `Frame`, then put a child UI
+            // on top for widget contents to take precedence.
+            .interact(egui::Sense::click_and_drag());
 
         // Update the stored data for this node and check for edge events.
         let mut edge_event = None;
