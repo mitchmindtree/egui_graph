@@ -284,31 +284,25 @@ impl Node {
         let put_rect = egui::Rect::from_min_size(pos_screen, put_size);
 
         // A `Ui` scope for placing the `Frame`.
-        let inner_response = ui.scope_builder(
-            egui::UiBuilder::new()
-                .max_rect(put_rect)
-                .sense(egui::Sense::click_and_drag()),
-            |ui: &mut egui::Ui| -> egui::Response {
-                // Show the frame.
-                let inner_response = frame.show(ui, |ui| {
-                    // Create a child UI that can be clicked and dragged.
-                    let scope_response = ui
-                        .scope_builder(
-                            egui::UiBuilder::new().sense(egui::Sense::click_and_drag()),
-                            |ui| {
-                                // Set the user's content.
-                                content(ui);
-                            },
-                        )
-                        .response;
-
-                    scope_response
+        let builder = egui::UiBuilder::new()
+            .max_rect(put_rect)
+            .sense(egui::Sense::click_and_drag());
+        let inner_response = ui.scope_builder(builder, |ui| {
+            // Show the frame.
+            let inner_response = frame.show(ui, |ui| {
+                // Create a node content UI that can be clicked and dragged.
+                let builder = egui::UiBuilder::new().sense(egui::Sense::click_and_drag());
+                let inner_response = ui.scope_builder(builder, |ui| {
+                    // Set the user's content.
+                    content(ui);
                 });
 
-                // Merge the content area response with the frame response.
-                inner_response.response.union(inner_response.inner)
-            },
-        );
+                inner_response.response
+            });
+
+            // Merge the content area response with the frame response.
+            inner_response.response.union(inner_response.inner)
+        });
         let mut response = inner_response.response.union(inner_response.inner);
 
         // Update the stored data for this node and check for edge events.
