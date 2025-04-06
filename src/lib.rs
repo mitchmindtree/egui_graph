@@ -217,14 +217,10 @@ impl Graph {
             let gmem_arc = memory(ui, self.id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
             let pointer = ui.input(|i| i.pointer.clone());
-            if let Some(ptr_screen) = pointer.interact_pos().or(pointer.hover_pos()) {
-                // The location of the pointer over the graph.
-                let ptr_graph = ptr_screen;
-                // let ptr_graph = camera.screen_to_graph(graph_rect, ptr_screen);
-
+            if let Some(ptr_graph) = pointer.interact_pos().or(pointer.hover_pos()) {
                 // Check for the closest socket.
                 let closest_socket = match ptr_on_graph {
-                    true => find_closest_socket(ptr_screen, graph_rect, layout, &gmem, ui)
+                    true => find_closest_socket(ptr_graph, graph_rect, layout, &gmem, ui)
                         .map(|(socket, _dist_sqrd)| socket),
                     false => None,
                 };
@@ -239,7 +235,6 @@ impl Graph {
                     closest_socket,
                     ptr_in_use,
                     ptr_on_graph,
-                    ptr_screen,
                     ptr_graph,
                     gmem.pressed.as_ref(),
                     ui,
@@ -626,7 +621,6 @@ fn graph_interaction(
     closest_socket: Option<node::Socket>,
     ptr_in_use: bool,
     ptr_on_graph: bool,
-    ptr_screen: egui::Pos2,
     ptr_graph: egui::Pos2,
     pressed: Option<&Pressed>,
     ui: &egui::Ui,
@@ -651,7 +645,7 @@ fn graph_interaction(
             }
             PressAction::Select => {
                 let min = pressed.origin_pos;
-                let max = ptr_screen;
+                let max = ptr_graph;
                 selection_rect = Some(egui::Rect::from_two_pos(min, max));
             }
             _ => (),
@@ -681,8 +675,8 @@ fn graph_interaction(
         let action = match closest_socket {
             Some(socket) => PressAction::Socket(socket),
             None => {
-                let min = ptr_screen;
-                let max = ptr_screen;
+                let min = ptr_graph;
+                let max = ptr_graph;
                 selection_rect = Some(egui::Rect::from_two_pos(min, max));
                 PressAction::Select
             }
@@ -698,7 +692,7 @@ fn graph_interaction(
 
     // Otherwise, check if we should start dragging nodes.
     } else if !ptr_in_use
-        && graph_rect.contains(ptr_screen)
+        && graph_rect.contains(ptr_graph)
         && pointer.button_down(egui::PointerButton::Primary)
         && pointer.any_pressed()
     {
