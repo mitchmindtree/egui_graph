@@ -267,7 +267,9 @@ impl Node {
 
             (selected, in_selection_rect)
         };
+
         // Style the frame based on interaction.
+        frame.stroke.width = ui.visuals().selection.stroke.width;
         if selected {
             frame.stroke = ui.visuals().selection.stroke;
         } else if in_selection_rect {
@@ -280,27 +282,34 @@ impl Node {
         // Custom framed node container that remains in the scene's layer
         let put_size = egui::Vec2::new(max_size.x, min_size.y);
         let put_rect = egui::Rect::from_min_size(pos_screen, put_size);
-        let mut response = ui
-            .put(put_rect, |ui: &mut egui::Ui| -> egui::Response {
-                frame
-                    .show(ui, |ui| {
-                        // Ensure the ui is at least large enough to provide space
-                        // for inputs/outputs.
-                        let gap = egui::Vec2::splat(win_corner_radius * 2.0);
-                        let min_size = min_size - gap;
-                        ui.set_min_size(min_size);
 
-                        // Set the user's content.
-                        content(ui);
-                    })
-                    .response
-            })
-            // FIXME: This is a hack - we should be `Sense`ing at widget
-            // instantiation, otherwise this will override click and drag
-            // interaction of any child widgets. The proper solution is likely to
-            // allocate a response at the start of the `Frame`, then put a child UI
-            // on top for widget contents to take precedence.
-            .interact(egui::Sense::click_and_drag());
+        // A `Ui` scope for placing the `Frame`.
+        let inner_response = ui.scope_builder(
+            egui::UiBuilder::new()
+                .max_rect(put_rect)
+                .sense(egui::Sense::click_and_drag()),
+            |ui: &mut egui::Ui| -> egui::Response {
+                // Show the frame.
+                let inner_response = frame.show(ui, |ui| {
+                    // Create a child UI that can be clicked and dragged.
+                    let scope_response = ui
+                        .scope_builder(
+                            egui::UiBuilder::new().sense(egui::Sense::click_and_drag()),
+                            |ui| {
+                                // Set the user's content.
+                                content(ui);
+                            },
+                        )
+                        .response;
+
+                    scope_response
+                });
+
+                // Merge the content area response with the frame response.
+                inner_response.response.union(inner_response.inner)
+            },
+        );
+        let mut response = inner_response.response.union(inner_response.inner);
 
         // Update the stored data for this node and check for edge events.
         let mut edge_event = None;
