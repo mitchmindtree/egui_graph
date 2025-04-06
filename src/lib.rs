@@ -116,8 +116,6 @@ pub struct Show<'a> {
     graph_id: egui::Id,
     /// The full area covered by the `Graph` within the UI.
     graph_rect: egui::Rect,
-    /// The visible area of the graph's canvas.
-    visible_rect: egui::Rect,
     /// If a selection is being performed with the mouse, this is the covered area.
     selection_rect: Option<egui::Rect>,
     /// Whether or not the primary mouse button was just released to perform the selection.
@@ -162,7 +160,6 @@ pub struct NodesCtx<'a> {
 pub struct EdgesCtx {
     graph_id: egui::Id,
     graph_rect: egui::Rect,
-    visible_rect: egui::Rect,
 }
 
 /// The set of detected graph interaction for a single graph widget update prior
@@ -288,7 +285,6 @@ impl Graph {
             let show = Show {
                 graph_id: self.id,
                 graph_rect,
-                visible_rect,
                 selection_rect,
                 select,
                 socket_press_released,
@@ -393,14 +389,12 @@ impl<'a> Show<'a> {
         {
             let Self {
                 graph_rect,
-                visible_rect,
                 graph_id,
                 ..
             } = self;
             let mut ctx = EdgesCtx {
                 graph_id,
                 graph_rect,
-                visible_rect,
             };
             content(&mut ctx, ui);
         }
@@ -497,11 +491,7 @@ impl EdgesCtx {
                 };
                 (pos, Some((socket.kind, normal)))
             }
-            _ => {
-                let cam_pos = self.visible_rect.center();
-                let pos = graph_to_screen(cam_pos, self.graph_rect, pressed.current_pos);
-                (pos, None)
-            }
+            _ => (pressed.current_pos, None),
         };
         Some(EdgeInProgress {
             start,
@@ -752,50 +742,6 @@ fn graph_interaction(
     }
 }
 
-/// Whether or not the given `Pressed` state implies that the camera should move
-/// due to the pointer being down near the edge of the rect.
-fn drag_moves_camera(pressed: Option<&Pressed>, ptr_graph: egui::Pos2) -> bool {
-    match pressed.as_ref() {
-        None => false,
-        Some(p) => {
-            let action_ok =
-                !matches!(p.action, PressAction::DragNodes { ref node, .. } if node.is_none());
-            action_ok && p.origin_pos != ptr_graph
-        }
-    }
-}
-
-/// The velocity of the camera movement caused by dragging near the edge of
-/// the rect.
-fn drag_moves_camera_velocity(
-    graph_rect: egui::Rect,
-    ptr_screen: egui::Pos2,
-    ui: &egui::Ui,
-) -> egui::Vec2 {
-    let max_vel = 8.0;
-    let mid = graph_rect.center();
-    let move_dist = ui
-        .spacing()
-        .interact_size
-        .x
-        .max(ui.spacing().interact_size.y);
-    let x_vel = if ptr_screen.x < mid.x {
-        (ptr_screen.x - (graph_rect.min.x + move_dist)).min(0.0) * max_vel / move_dist
-    } else if ptr_screen.x > mid.x {
-        (ptr_screen.x - (graph_rect.max.x - move_dist)).max(0.0) * max_vel / move_dist
-    } else {
-        0.0
-    };
-    let y_vel = if ptr_screen.y < mid.y {
-        (ptr_screen.y - (graph_rect.min.y + move_dist)).min(0.0) * max_vel / move_dist
-    } else if ptr_screen.y > mid.y {
-        (ptr_screen.y - (graph_rect.max.y - move_dist)).max(0.0) * max_vel / move_dist
-    } else {
-        0.0
-    };
-    egui::Vec2::new(x_vel, y_vel)
-}
-
 // Paint a subtle dot grid to check camera movement.
 fn paint_dot_grid(visible_rect: egui::Rect, ui: &mut egui::Ui) {
     let dot_step = ui.spacing().interact_size.y;
@@ -858,16 +804,4 @@ fn memory(ui: &egui::Ui, graph_id: egui::Id) -> Arc<Mutex<GraphTempMemory>> {
         d.get_temp_mut_or_default::<Arc<Mutex<GraphTempMemory>>>(graph_id)
             .clone()
     })
-}
-
-fn graph_to_screen(cam_pos: egui::Pos2, graph_rect: egui::Rect, pos: egui::Pos2) -> egui::Pos2 {
-    let half_rect_size = graph_rect.size() * 0.5;
-    let v = pos - cam_pos.to_vec2() + half_rect_size;
-    egui::Pos2::new(v.x, v.y)
-}
-
-fn screen_to_graph(cam_pos: egui::Pos2, graph_rect: egui::Rect, pos: egui::Pos2) -> egui::Pos2 {
-    let half_rect_size = graph_rect.size() * 0.5;
-    let v = pos - half_rect_size + cam_pos.to_vec2();
-    egui::Pos2::new(v.x, v.y)
 }
