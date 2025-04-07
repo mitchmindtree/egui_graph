@@ -283,9 +283,19 @@ impl Node {
         let put_size = egui::Vec2::new(max_size.x, min_size.y);
         let put_rect = egui::Rect::from_min_size(pos_screen, put_size);
 
+        // Put the node's frame on a layer above the scene's UI layer.
+        let scene_layer = ui.layer_id();
+        let frame_layer = egui::LayerId::new(scene_layer.order, self.id);
+        ui.ctx().set_sublayer(scene_layer, frame_layer);
+        // let transform = ui.ctx().layer_transform_to_global(scene_layer).unwrap();
+        // ui.ctx().set_transform_layer(frame_layer, transform);
+        ui.ctx()
+            .set_transform_layer(frame_layer, ctx.scene_to_global);
+
         // A `Ui` scope for placing the `Frame`.
         let builder = egui::UiBuilder::new()
             .max_rect(put_rect)
+            .layer_id(frame_layer)
             .sense(egui::Sense::click_and_drag());
         let inner_response = ui.scope_builder(builder, |ui| {
             // Show the frame.
@@ -296,7 +306,6 @@ impl Node {
                     // Set the user's content.
                     content(ui);
                 });
-
                 inner_response.response
             });
 
@@ -512,22 +521,19 @@ impl Node {
 
             let color = self.socket_color.unwrap_or(ui.visuals().text_color());
             let hl_size = (self.socket_radius + 4.0).max(4.0);
+            let painter = ui.painter();
             for ix in 0..self.inputs {
                 if paint_highlight(SocketKind::Input, ix) {
-                    ui.painter()
-                        .circle_filled(in_pos, hl_size, color.linear_multiply(0.25));
+                    painter.circle_filled(in_pos, hl_size, color.linear_multiply(0.25));
                 }
-                ui.painter()
-                    .circle_filled(in_pos, self.socket_radius, color);
+                painter.circle_filled(in_pos, self.socket_radius, color);
                 in_pos += in_step;
             }
             for ix in 0..self.outputs {
                 if paint_highlight(SocketKind::Output, ix) {
-                    ui.painter()
-                        .circle_filled(out_pos, hl_size, color.linear_multiply(0.25));
+                    painter.circle_filled(out_pos, hl_size, color.linear_multiply(0.25));
                 }
-                ui.painter()
-                    .circle_filled(out_pos, self.socket_radius, color);
+                painter.circle_filled(out_pos, self.socket_radius, color);
                 out_pos += out_step;
             }
         }

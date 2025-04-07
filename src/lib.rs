@@ -127,6 +127,9 @@ pub struct Show<'a> {
     /// We will use this to remove old node state on `drop`.
     visited: &'a mut HashSet<egui::Id>,
     layout: &'a mut Layout,
+    /// The transform for the graph's scene,
+    /// used for setting the node sublayer transform.
+    scene_to_global: egui::emath::TSTransform,
 }
 
 /// Information about the inputs and outputs for a particular node.
@@ -154,6 +157,7 @@ pub struct NodesCtx<'a> {
     socket_press_released: Option<node::Socket>,
     visited: &'a mut HashSet<egui::Id>,
     layout: &'a mut Layout,
+    scene_to_global: egui::emath::TSTransform,
 }
 
 /// A context to assist with the instantiation of edge widgets.
@@ -203,7 +207,8 @@ impl Graph {
         } = *view;
 
         // TODO: make zoom_range a graph argument.
-        let scene = egui::containers::Scene::new().zoom_range(0.5..=2.0);
+        let zoom_range = 0.5..=2.0;
+        let scene = egui::containers::Scene::new().zoom_range(zoom_range.clone());
         scene.show(ui, scene_rect, |ui| {
             // Draw the selection rectangle if there is one.
             let mut selection_rect = None;
@@ -277,6 +282,9 @@ impl Graph {
 
             let mut visited = HashSet::default();
 
+            let scene_to_global =
+                fit_to_rect_in_scene(graph_rect, visible_rect, zoom_range.clone().into());
+
             let show = Show {
                 graph_id: self.id,
                 graph_rect,
@@ -285,6 +293,7 @@ impl Graph {
                 socket_press_released,
                 visited: &mut visited,
                 layout,
+                scene_to_global,
             };
 
             // Drop the lock before running the content.
@@ -359,6 +368,7 @@ impl<'a> Show<'a> {
                 socket_press_released,
                 ref mut visited,
                 ref mut layout,
+                scene_to_global,
                 ..
             } = self;
             let mut ctx = NodesCtx {
@@ -369,6 +379,7 @@ impl<'a> Show<'a> {
                 socket_press_released,
                 visited: &mut *visited,
                 layout: &mut *layout,
+                scene_to_global,
             };
             content(&mut ctx, ui);
         }
@@ -798,4 +809,34 @@ fn memory(ui: &egui::Ui, graph_id: egui::Id) -> Arc<Mutex<GraphTempMemory>> {
         d.get_temp_mut_or_default::<Arc<Mutex<GraphTempMemory>>>(graph_id)
             .clone()
     })
+}
+
+// Copied directly from egui/containers/scene.rs.
+// FIXME: remove this if/when egui #5884 lands in favour of using
+// `ui.ctx().layer_transform_to_global(scene_layer)`.
+// This is just a hack to get the `TSTransform` of the scene
+// without the added frame of latency.
+fn fit_to_rect_in_scene(
+    rect_in_global: egui::Rect,
+    rect_in_scene: egui::Rect,
+    zoom_range: egui::Rangef,
+) -> egui::emath::TSTransform {
+    // Compute the scale factor to fit the bounding rectangle into the available
+    // screen size:
+    let scale = rect_in_global.size() / rect_in_scene.size();
+
+    // Use the smaller of the two scales to ensure the whole rectangle fits on
+    // the screen:
+    let scale = scale.min_elem();
+
+    // Clamp scale to what is allowed
+    let scale = zoom_range.clamp(scale);
+
+    // Compute the translation to center the bounding rect in the screen:
+    let center_in_global = rect_in_global.center().to_vec2();
+    let center_scene = rect_in_scene.center().to_vec2();
+
+    // Set the transformation to scale and then translate to center.
+    egui::emath::TSTransform::from_translation(center_in_global - scale * center_scene)
+        * egui::emath::TSTransform::from_scaling(scale)
 }
