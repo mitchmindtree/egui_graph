@@ -80,7 +80,6 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        gui(ctx, &mut self.view, &mut self.state);
         if self.state.auto_layout {
             self.view.layout = layout(
                 &self.state.graph,
@@ -89,6 +88,7 @@ impl eframe::App for App {
                 ctx,
             );
         }
+        gui(ctx, &mut self.view, &mut self.state);
     }
 }
 

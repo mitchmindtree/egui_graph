@@ -401,6 +401,7 @@ impl Node {
         }
 
         if response.rect.min != pos_screen {
+            // NOTE: This doesn't appear to be doing anything.
             *target_pos_graph += response.rect.min - pos_screen;
             response.mark_changed();
         }
