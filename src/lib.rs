@@ -14,6 +14,7 @@ pub mod node;
 pub struct Graph {
     background: bool,
     zoom_range: egui::Rangef,
+    max_inner_size: Option<egui::Vec2>,
     id: egui::Id,
 }
 
@@ -192,6 +193,7 @@ impl Graph {
         Self {
             background: true,
             zoom_range: Self::DEFAULT_ZOOM_RANGE,
+            max_inner_size: None,
             id: id(id_src),
         }
     }
@@ -212,6 +214,13 @@ impl Graph {
         self
     }
 
+    /// Set the maximum size of the scene's inner [`Ui`] that will be created.
+    #[inline]
+    pub fn max_inner_size(mut self, max_inner_size: impl Into<egui::Vec2>) -> Self {
+        self.max_inner_size = Some(max_inner_size.into());
+        self
+    }
+
     /// Begin showing the parts of the Graph.
     pub fn show(
         self,
@@ -227,8 +236,12 @@ impl Graph {
             ref mut layout,
         } = *view;
 
-        // TODO: make zoom_range a graph argument.
-        let scene = egui::containers::Scene::new().zoom_range(self.zoom_range.clone());
+        // Create the Scene.
+        let mut scene = egui::containers::Scene::new().zoom_range(self.zoom_range.clone());
+        if let Some(max_inner_size) = self.max_inner_size {
+            scene = scene.max_inner_size(max_inner_size);
+        }
+
         scene.show(ui, scene_rect, |ui| {
             // Draw the selection rectangle if there is one.
             let mut selection_rect = None;
