@@ -207,7 +207,7 @@ impl Graph {
         } = *view;
 
         // TODO: make zoom_range a graph argument.
-        let zoom_range = 0.5..=2.0;
+        let zoom_range = 0.5..=1.0;
         let scene = egui::containers::Scene::new().zoom_range(zoom_range.clone());
         scene.show(ui, scene_rect, |ui| {
             // Draw the selection rectangle if there is one.
@@ -221,6 +221,13 @@ impl Graph {
             // Check for selection rectangle and node dragging.
             let gmem_arc = memory(ui, self.id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
+
+            // Determine the transform for node dragging and the node frame
+            // layer.
+            let visible_rect = ui.clip_rect();
+            let scene_to_global =
+                fit_to_rect_in_scene(graph_rect, visible_rect, zoom_range.clone().into());
+
             let pointer = ui.input(|i| i.pointer.clone());
             if let Some(ptr_graph) = pointer.interact_pos().or(pointer.hover_pos()) {
                 // Check for the closest socket.
@@ -236,6 +243,7 @@ impl Graph {
                     &gmem.node_sizes,
                     &gmem.selection,
                     layout,
+                    &scene_to_global,
                     &pointer,
                     closest_socket,
                     ptr_in_use,
@@ -266,7 +274,6 @@ impl Graph {
             }
 
             // Paint the background rect.
-            let visible_rect = ui.clip_rect();
             if self.background {
                 paint_background(visible_rect, ui);
             }
@@ -281,9 +288,6 @@ impl Graph {
             }
 
             let mut visited = HashSet::default();
-
-            let scene_to_global =
-                fit_to_rect_in_scene(graph_rect, visible_rect, zoom_range.clone().into());
 
             let show = Show {
                 graph_id: self.id,
@@ -628,6 +632,7 @@ fn graph_interaction(
     node_sizes: &NodeSizes,
     selection: &Selection,
     layout: &Layout,
+    scene_to_global: &egui::emath::TSTransform,
     pointer: &egui::PointerState,
     closest_socket: Option<node::Socket>,
     ptr_in_use: bool,
@@ -648,7 +653,7 @@ fn graph_interaction(
                 node: Some(ref node),
             } => {
                 // Determine the drag delta.
-                let delta = ptr_graph - pressed.origin_pos;
+                let delta = (ptr_graph - pressed.origin_pos) / scene_to_global.scaling;
                 let target = node.position_at_origin + delta;
                 if let Some(current) = layout.get(&node.id) {
                     drag_nodes_delta = target - *current;

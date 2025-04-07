@@ -171,6 +171,7 @@ impl Node {
 
         // Indicate that we've visited this node this update.
         ctx.visited.insert(self.id);
+
         // Determine the current position of the window relative to the graph origin.
         let target_pos_graph = layout.entry(self.id).or_insert_with(|| {
             // If the mouse is over the graph, add the node under the mouse.
@@ -185,17 +186,22 @@ impl Node {
         });
 
         // Interpolate toward the desired position over time for auto-layout.
+        // Only do so if this node is not selected with the primary mouse down.
+        let is_selected = crate::is_node_selected(ui, ctx.graph_id, self.id);
+        let is_primary_down = ui.input(|i| i.pointer.primary_down());
+        let animation_time = if is_selected && is_primary_down {
+            0.0
+        } else {
+            self.animation_time
+        };
         let pos_graph = {
             let ctx = ui.ctx();
             let idx = self.id.with("x");
             let idy = self.id.with("y");
-            let x = ctx.animate_value_with_time(idx, target_pos_graph.x, self.animation_time);
-            let y = ctx.animate_value_with_time(idy, target_pos_graph.y, self.animation_time);
+            let x = ctx.animate_value_with_time(idx, target_pos_graph.x, animation_time);
+            let y = ctx.animate_value_with_time(idy, target_pos_graph.y, animation_time);
             egui::Pos2::new(x, y)
         };
-
-        // Translate the graph position to a position within the UI.
-        let pos_screen = pos_graph;
 
         // The window should always be at least the interaction size.
         let min_item_spacing = ui.spacing().item_spacing.x.min(ui.spacing().item_spacing.y);
@@ -245,7 +251,7 @@ impl Node {
                         .get(&self.id)
                         .cloned()
                         .unwrap_or(egui::Vec2::ZERO);
-                    let rect = egui::Rect::from_min_size(pos_screen, size);
+                    let rect = egui::Rect::from_min_size(pos_graph, size);
                     sel_rect.intersects(rect)
                 }
             };
@@ -281,7 +287,7 @@ impl Node {
 
         // Custom framed node container that remains in the scene's layer
         let put_size = egui::Vec2::new(max_size.x, min_size.y);
-        let put_rect = egui::Rect::from_min_size(pos_screen, put_size);
+        let put_rect = egui::Rect::from_min_size(pos_graph, put_size);
 
         // Put the node's frame on a layer above the scene's UI layer.
         let scene_layer = ui.layer_id();
@@ -398,12 +404,6 @@ impl Node {
                     }
                 }
             }
-        }
-
-        if response.rect.min != pos_screen {
-            // NOTE: This doesn't appear to be doing anything.
-            *target_pos_graph += response.rect.min - pos_screen;
-            response.mark_changed();
         }
 
         // The inlets/outlets.
