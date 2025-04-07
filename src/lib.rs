@@ -13,6 +13,7 @@ pub mod node;
 /// The main interface for the `Graph` widget.
 pub struct Graph {
     background: bool,
+    zoom_range: egui::Rangef,
     id: egui::Id,
 }
 
@@ -177,10 +178,20 @@ struct GraphInteraction {
 }
 
 impl Graph {
+    /// The default zoom range.
+    ///
+    /// Allows zooming out 4x, but does not allow zooming in past the
+    /// pixel-perfect default level.
+    pub const DEFAULT_ZOOM_RANGE: egui::Rangef = egui::Rangef {
+        min: 0.25,
+        max: 1.0,
+    };
+
     /// Begin building the new graph widget.
     pub fn new(id_src: impl Hash) -> Self {
         Self {
             background: true,
+            zoom_range: Self::DEFAULT_ZOOM_RANGE,
             id: id(id_src),
         }
     }
@@ -188,6 +199,16 @@ impl Graph {
     /// Whether or not to fill the background. Default is `true`.
     pub fn background(mut self, show: bool) -> Self {
         self.background = show;
+        self
+    }
+
+    /// Set the allowed zoom range.
+    ///
+    /// A zoom < 1.0 zooms out, while a zoom > 1.0 zooms in.
+    ///
+    /// Default: [Graph::DEFAULT_ZOOM_RANGE].
+    pub fn zoom_range(mut self, zoom_range: impl Into<egui::Rangef>) -> Self {
+        self.zoom_range = zoom_range.into();
         self
     }
 
@@ -207,8 +228,7 @@ impl Graph {
         } = *view;
 
         // TODO: make zoom_range a graph argument.
-        let zoom_range = 0.5..=1.0;
-        let scene = egui::containers::Scene::new().zoom_range(zoom_range.clone());
+        let scene = egui::containers::Scene::new().zoom_range(self.zoom_range.clone());
         scene.show(ui, scene_rect, |ui| {
             // Draw the selection rectangle if there is one.
             let mut selection_rect = None;
@@ -226,7 +246,7 @@ impl Graph {
             // layer.
             let visible_rect = ui.clip_rect();
             let scene_to_global =
-                fit_to_rect_in_scene(graph_rect, visible_rect, zoom_range.clone().into());
+                fit_to_rect_in_scene(graph_rect, visible_rect, self.zoom_range.clone().into());
 
             let pointer = ui.input(|i| i.pointer.clone());
             if let Some(ptr_graph) = pointer.interact_pos().or(pointer.hover_pos()) {
