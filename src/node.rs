@@ -308,6 +308,11 @@ impl Node {
                 // Create a node content UI that can be clicked and dragged.
                 let builder = egui::UiBuilder::new().sense(egui::Sense::click_and_drag());
                 let inner_response = ui.scope_builder(builder, |ui| {
+                    // Set the minimum size required to layout the sockets.
+                    let gap = egui::Vec2::splat(win_corner_radius * 2.0);
+                    let min_size = min_size - gap;
+                    ui.set_min_size(min_size);
+
                     // Set the user's content.
                     content(ui);
                 });
