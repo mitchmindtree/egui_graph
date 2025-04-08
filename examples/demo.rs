@@ -258,9 +258,13 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         color: state.wire_color,
     };
 
-    let mouse_pos = ui.input(|i| i.pointer.interact_pos().unwrap_or_default());
+    let response = ui.response();
+    let mouse_pos = response
+        .interact_pointer_pos()
+        .or(response.hover_pos())
+        .unwrap_or_default();
     let click = ui.input(|i| i.pointer.any_released());
-    let shift_held = ui.input(|i| i.modifiers.shift);
+    let shift_held = ui.input(|i| i.modifiers.ctrl);
     let mut clicked_on_edge = false;
     let selection_threshold = state.wire_width * 8.0; // Threshold for selecting the edge
 
