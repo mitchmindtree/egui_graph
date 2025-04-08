@@ -267,9 +267,9 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         .interact_pointer_pos()
         .or(response.hover_pos())
         .unwrap_or_default();
-    let click = ui.input(|i| i.pointer.any_released());
+    let primary_released = ui.input(|i| i.pointer.primary_released());
     let shift_held = ui.input(|i| i.modifiers.ctrl);
-    let mut clicked_on_edge = false;
+    let mut primary_released_on_edge = false;
     let selection_threshold = state.wire_width * 8.0; // Threshold for selecting the edge
 
     for e in indices {
@@ -286,8 +286,8 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
         // Check if mouse is over the bezier curve
         let closest_point = bezier.closest_point(dist_per_pt, egui::Pos2::from(mouse_pos));
         let distance_to_mouse = closest_point.distance(egui::Pos2::from(mouse_pos));
-        if distance_to_mouse < selection_threshold && click {
-            clicked_on_edge = true;
+        if distance_to_mouse < selection_threshold && primary_released {
+            primary_released_on_edge = true;
             // If Shift is not held, clear previous selection
             if !shift_held {
                 state.interaction.selection.edges.clear();
@@ -310,7 +310,7 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
             .add(egui::Shape::line(pts.clone(), wire_stroke));
     }
 
-    if click && !clicked_on_edge {
+    if primary_released && !primary_released_on_edge {
         // Click occurred on the canvas, clear the selection
         state.interaction.selection.edges.clear();
     }

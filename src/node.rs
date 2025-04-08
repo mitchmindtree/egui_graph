@@ -176,11 +176,12 @@ impl Node {
         let target_pos_graph = layout.entry(self.id).or_insert_with(|| {
             // If the mouse is over the graph, add the node under the mouse.
             // Otherwise, add the node to the top-left.
-            let mut pos = ctx.graph_rect.center();
-            if ui.rect_contains_pointer(ctx.graph_rect) {
-                ui.input(|i| i.pointer.hover_pos()).map(|ptr| {
+            let clip_rect = ui.clip_rect();
+            let mut pos = clip_rect.center();
+            if ui.rect_contains_pointer(clip_rect) {
+                if let Some(ptr) = ui.response().hover_pos() {
                     pos = ptr;
-                });
+                }
             }
             egui::Pos2::new(pos.x, pos.y)
         });
@@ -228,7 +229,7 @@ impl Node {
                 }
             }
         }
-        // Retrieve the frame for the window.
+        // Retrieve the frame.
         let mut frame = self.frame.unwrap_or_else(|| default_frame(ui.style()));
 
         let max_w = self.max_width.unwrap_or(ui.spacing().text_edit_width);
@@ -238,8 +239,8 @@ impl Node {
         let mut selection_changed = false;
 
         // Determine whether or not this node is within the selection rect.
-        // NOTE: We use the size from last frame as we don't know the size until the user's content
-        // is added... Is there a better way to handle this?
+        // NOTE: We use the size from last frame as we don't know the size until
+        // the user's content is added... Is there a better way to handle this?
         let (mut selected, in_selection_rect) = {
             let gmem_arc = crate::memory(ui, ctx.graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");

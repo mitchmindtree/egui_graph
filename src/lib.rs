@@ -64,12 +64,8 @@ struct Pressed {
     /// should stay the same and a drag will begin.
     over_selection_at_origin: bool,
     /// The origin of the pointer over the graph at the begining of the press.
-    ///
-    /// Position is in graph coordinates (relative to the centre of the graph). This is to allow
-    /// for selections/drags larger than the visible area of the graph (e.g. if the camera is moved
-    /// during selection to cover a larger area).
     origin_pos: egui::Pos2,
-    /// Position is in graph coordinates (relative to the centre of the graph).
+    /// The current position over the graph.
     current_pos: egui::Pos2,
     /// The action performed by this press.
     action: PressAction,
@@ -228,13 +224,15 @@ impl Graph {
         self
     }
 
-    /// Begin showing the parts of the Graph.
-    pub fn show(
+    /// Begin showing the Graph.
+    ///
+    /// Returns the `InnerResponse` of the inner `Scene`.
+    pub fn show<R>(
         self,
         view: &mut View,
         ui: &mut egui::Ui,
-        content: impl FnOnce(&mut egui::Ui, Show),
-    ) {
+        content: impl FnOnce(&mut egui::Ui, Show) -> R,
+    ) -> egui::response::InnerResponse<R> {
         // The full area to be occuppied by the graph.
         let graph_rect = ui.available_rect_before_wrap();
 
@@ -254,7 +252,7 @@ impl Graph {
         // Track the bounding area of all widgets in the scene.
         let mut bounding_rect = None;
 
-        scene.show(ui, scene_rect, |ui| {
+        let scene_response = scene.show(ui, scene_rect, |ui| {
             // Draw the selection rectangle if there is one.
             let mut selection_rect = None;
             let mut select = false;
@@ -348,10 +346,12 @@ impl Graph {
             // Drop the lock before running the content.
             std::mem::drop(gmem);
 
-            content(ui, show);
+            let output = content(ui, show);
 
             prune_unused_nodes(self.id, &visited, ui);
             bounding_rect = Some(ui.min_rect());
+
+            output
         });
 
         if self.center_view {
@@ -359,6 +359,8 @@ impl Graph {
                 view.scene_rect = rect.expand(rect.width() * 0.1);
             }
         }
+
+        scene_response
     }
 }
 
