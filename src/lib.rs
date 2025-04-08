@@ -53,7 +53,7 @@ struct Selection {
 }
 
 /// State related to the last press of the primary pointer button over the graph.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Pressed {
     /// Whether or not the pointer is currently over one of the selected nodes.
     ///
@@ -248,7 +248,6 @@ impl Graph {
 
             // Check for interactions with the scene area.
             let scene_response = ui.response();
-            let ptr_in_use = ui.ctx().is_using_pointer();
             let ptr_on_graph = scene_response.hovered();
 
             // Check for selection rectangle and node dragging.
@@ -271,25 +270,18 @@ impl Graph {
                     .mul_pos(ptr_global);
 
                 // Check for the closest socket.
-                let closest_socket = match ptr_on_graph {
-                    true => find_closest_socket(ptr_graph, layout, &gmem, ui)
-                        .map(|(socket, _dist_sqrd)| socket),
-                    false => None,
-                };
+                let closest_socket = ui.response().hover_pos().and_then(|pos| {
+                    find_closest_socket(pos, layout, &gmem, ui).map(|(socket, _dist_sqrd)| socket)
+                });
 
                 // Check for graph interactions.
                 let interaction = graph_interaction(
-                    graph_rect,
-                    &gmem.node_sizes,
-                    &gmem.selection,
                     layout,
                     &pointer,
                     closest_socket,
-                    ptr_in_use,
                     ptr_on_graph,
                     ptr_graph,
                     gmem.pressed.as_ref(),
-                    ui,
                 );
 
                 // Apply drag delta to all selected nodes.
@@ -665,17 +657,12 @@ fn find_closest_socket(
 
 /// Interpret some basic interactions from the state of the graph and recent input.
 fn graph_interaction(
-    graph_rect: egui::Rect,
-    node_sizes: &NodeSizes,
-    selection: &Selection,
     layout: &Layout,
     pointer: &egui::PointerState,
     closest_socket: Option<node::Socket>,
-    ptr_in_use: bool,
     ptr_on_graph: bool,
     ptr_graph: egui::Pos2,
     pressed: Option<&Pressed>,
-    ui: &egui::Ui,
 ) -> GraphInteraction {
     let mut select = false;
     let mut socket_press_released = None;
@@ -740,38 +727,6 @@ fn graph_interaction(
             action,
         };
         Some(pressed)
-
-    // Otherwise, check if we should start dragging nodes.
-    } else if !ptr_in_use
-        && graph_rect.contains(ptr_graph)
-        && pointer.button_down(egui::PointerButton::Primary)
-        && pointer.any_pressed()
-    {
-        // Check if the mouse is over a selected node.
-        let mut over_any = false;
-        let mut over_selected = false;
-        let aim_radius = ui.input(|i| i.aim_radius());
-        for (&n_id, &size) in node_sizes {
-            let pos = layout.get(&n_id).cloned().unwrap_or(egui::Pos2::ZERO);
-            let r = egui::Rect::from_min_size(pos, size);
-            if r.expand(aim_radius).contains(ptr_graph) {
-                over_any = true;
-                if selection.nodes.contains(&n_id) {
-                    over_selected = true;
-                    break;
-                }
-            }
-        }
-        if over_any {
-            Some(Pressed {
-                over_selection_at_origin: over_selected,
-                origin_pos: ptr_graph,
-                current_pos: ptr_graph,
-                action: PressAction::DragNodes { node: None },
-            })
-        } else {
-            pressed.cloned()
-        }
 
     // Otherwise, pass through existing state.
     } else {
