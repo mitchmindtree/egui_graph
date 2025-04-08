@@ -154,25 +154,20 @@ impl Node {
     /// Present the `Node`'s `Window` and add the given contents.
     pub fn show(
         self,
-        view: &mut crate::View,
         ctx: &mut NodesCtx,
         ui: &mut egui::Ui,
         content: impl FnOnce(&mut egui::Ui),
     ) -> NodeResponse {
-        self.show_impl(view, ctx, ui, Box::new(content) as Box<_>)
+        self.show_impl(ctx, ui, Box::new(content) as Box<_>)
     }
 
     fn show_impl<'a>(
         self,
-        view: &mut crate::View,
         ctx: &mut NodesCtx,
         ui: &mut egui::Ui,
         content: Box<dyn FnOnce(&mut egui::Ui) + 'a>,
     ) -> NodeResponse {
-        let crate::View {
-            ref mut layout,
-            ref camera,
-        } = *view;
+        let layout = &mut ctx.layout;
 
         // Indicate that we've visited this node this update.
         ctx.visited.insert(self.id);
@@ -181,28 +176,33 @@ impl Node {
         let target_pos_graph = layout.entry(self.id).or_insert_with(|| {
             // If the mouse is over the graph, add the node under the mouse.
             // Otherwise, add the node to the top-left.
-            let mut pos = camera.pos - ctx.graph_rect.center() + ui.spacing().item_spacing;
-            if ui.rect_contains_pointer(ctx.graph_rect) {
-                ui.input(|i| i.pointer.hover_pos()).map(|ptr| {
-                    pos = ptr - ctx.graph_rect.center() + camera.pos.to_vec2()
-                        - ui.spacing().interact_size * 0.5;
-                });
+            let clip_rect = ui.clip_rect();
+            let mut pos = clip_rect.center();
+            if ui.rect_contains_pointer(clip_rect) {
+                if let Some(ptr) = ui.response().hover_pos() {
+                    pos = ptr;
+                }
             }
             egui::Pos2::new(pos.x, pos.y)
         });
 
         // Interpolate toward the desired position over time for auto-layout.
+        // Only do so if this node is not selected with the primary mouse down.
+        let is_selected = crate::is_node_selected(ui, ctx.graph_id, self.id);
+        let is_primary_down = ui.input(|i| i.pointer.primary_down());
+        let animation_time = if is_selected && is_primary_down {
+            0.0
+        } else {
+            self.animation_time
+        };
         let pos_graph = {
             let ctx = ui.ctx();
             let idx = self.id.with("x");
             let idy = self.id.with("y");
-            let x = ctx.animate_value_with_time(idx, target_pos_graph.x, self.animation_time);
-            let y = ctx.animate_value_with_time(idy, target_pos_graph.y, self.animation_time);
+            let x = ctx.animate_value_with_time(idx, target_pos_graph.x, animation_time);
+            let y = ctx.animate_value_with_time(idy, target_pos_graph.y, animation_time);
             egui::Pos2::new(x, y)
         };
-
-        // Translate the graph position to a position within the UI.
-        let pos_screen = camera.graph_to_screen(ctx.graph_rect, pos_graph);
 
         // The window should always be at least the interaction size.
         let min_item_spacing = ui.spacing().item_spacing.x.min(ui.spacing().item_spacing.y);
@@ -229,7 +229,7 @@ impl Node {
                 }
             }
         }
-        // Retrieve the frame for the window.
+        // Retrieve the frame.
         let mut frame = self.frame.unwrap_or_else(|| default_frame(ui.style()));
 
         let max_w = self.max_width.unwrap_or(ui.spacing().text_edit_width);
@@ -239,8 +239,8 @@ impl Node {
         let mut selection_changed = false;
 
         // Determine whether or not this node is within the selection rect.
-        // NOTE: We use the size from last frame as we don't know the size until the user's content
-        // is added... Is there a better way to handle this?
+        // NOTE: We use the size from last frame as we don't know the size until
+        // the user's content is added... Is there a better way to handle this?
         let (mut selected, in_selection_rect) = {
             let gmem_arc = crate::memory(ui, ctx.graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
@@ -252,7 +252,7 @@ impl Node {
                         .get(&self.id)
                         .cloned()
                         .unwrap_or(egui::Vec2::ZERO);
-                    let rect = egui::Rect::from_min_size(pos_screen, size);
+                    let rect = egui::Rect::from_min_size(pos_graph, size);
                     sel_rect.intersects(rect)
                 }
             };
@@ -274,7 +274,9 @@ impl Node {
 
             (selected, in_selection_rect)
         };
+
         // Style the frame based on interaction.
+        frame.stroke.width = ui.visuals().selection.stroke.width;
         if selected {
             frame.stroke = ui.visuals().selection.stroke;
         } else if in_selection_rect {
@@ -284,33 +286,44 @@ impl Node {
             frame.stroke.color = color;
         }
 
-        let mut response = egui::Window::new("")
-            .id(self.id)
-            .frame(frame)
-            .resizable(false)
-            .movable(false)
-            // TODO: These `min_*` and `default_size` methods seem to be totally ignored? Should
-            // fix this upstream, but for now we just set min size on the window's `Ui` instead.
-            .min_width(min_size.x)
-            .min_height(min_size.y)
-            .default_size(min_size)
-            // TODO: Only `max_size` seems to be considered here - `min_size` seems to be ignored.
-            .resize(|resize| resize.max_size(max_size).min_size(min_size))
-            .current_pos(pos_screen)
-            .collapsible(false)
-            .title_bar(false)
-            .auto_sized()
-            .constrain_to(egui::Rect::EVERYTHING)
-            .show(ui.ctx(), move |ui| {
-                // Ensure the ui is at least large enough to provide space for inputs/outputs.
-                let gap = egui::Vec2::splat(win_corner_radius * 2.0);
-                let min_size = min_size - gap;
-                ui.set_min_size(min_size);
-                // Set the user's content.
-                content(ui);
-            })
-            .expect("node windows are always open")
-            .response;
+        // Custom framed node container that remains in the scene's layer
+        let put_size = egui::Vec2::new(max_size.x, min_size.y);
+        let put_rect = egui::Rect::from_min_size(pos_graph, put_size);
+
+        // Put the node's frame on a layer above the scene's UI layer.
+        let scene_layer = ui.layer_id();
+        let frame_layer = egui::LayerId::new(scene_layer.order, self.id);
+        ui.ctx().set_sublayer(scene_layer, frame_layer);
+        if let Some(transform) = ui.ctx().layer_transform_to_global(scene_layer) {
+            ui.ctx().set_transform_layer(frame_layer, transform);
+        }
+
+        // A `Ui` scope for placing the `Frame`.
+        let builder = egui::UiBuilder::new()
+            .max_rect(put_rect)
+            .layer_id(frame_layer)
+            .sense(egui::Sense::click_and_drag());
+        let inner_response = ui.scope_builder(builder, |ui| {
+            // Show the frame.
+            let inner_response = frame.show(ui, |ui| {
+                // Create a node content UI that can be clicked and dragged.
+                let builder = egui::UiBuilder::new().sense(egui::Sense::click_and_drag());
+                let inner_response = ui.scope_builder(builder, |ui| {
+                    // Set the minimum size required to layout the sockets.
+                    let gap = egui::Vec2::splat(win_corner_radius * 2.0);
+                    let min_size = min_size - gap;
+                    ui.set_min_size(min_size);
+
+                    // Set the user's content.
+                    content(ui);
+                });
+                inner_response.response
+            });
+
+            // Merge the content area response with the frame response.
+            inner_response.response.union(inner_response.inner)
+        });
+        let mut response = inner_response.response.union(inner_response.inner);
 
         // Update the stored data for this node and check for edge events.
         let mut edge_event = None;
@@ -338,8 +351,7 @@ impl Node {
                     selected = true;
                     // We must initialize gmem.pressed here so that subsequent drag updates work correctly.
                     if gmem.pressed.is_none() {
-                        let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
-                        let ptr_graph = view.camera.screen_to_graph(ctx.graph_rect, ptr_screen);
+                        let ptr_graph = response.hover_pos().unwrap_or_default();
                         gmem.pressed = Some(crate::Pressed {
                             over_selection_at_origin: true,
                             origin_pos: ptr_graph,
@@ -396,11 +408,6 @@ impl Node {
                     }
                 }
             }
-        }
-
-        if response.rect.min != pos_screen {
-            *target_pos_graph += response.rect.min - pos_screen;
-            response.mark_changed();
         }
 
         // The inlets/outlets.
@@ -519,22 +526,19 @@ impl Node {
 
             let color = self.socket_color.unwrap_or(ui.visuals().text_color());
             let hl_size = (self.socket_radius + 4.0).max(4.0);
+            let painter = ui.painter();
             for ix in 0..self.inputs {
                 if paint_highlight(SocketKind::Input, ix) {
-                    ui.painter()
-                        .circle_filled(in_pos, hl_size, color.linear_multiply(0.25));
+                    painter.circle_filled(in_pos, hl_size, color.linear_multiply(0.25));
                 }
-                ui.painter()
-                    .circle_filled(in_pos, self.socket_radius, color);
+                painter.circle_filled(in_pos, self.socket_radius, color);
                 in_pos += in_step;
             }
             for ix in 0..self.outputs {
                 if paint_highlight(SocketKind::Output, ix) {
-                    ui.painter()
-                        .circle_filled(out_pos, hl_size, color.linear_multiply(0.25));
+                    painter.circle_filled(out_pos, hl_size, color.linear_multiply(0.25));
                 }
-                ui.painter()
-                    .circle_filled(out_pos, self.socket_radius, color);
+                painter.circle_filled(out_pos, self.socket_radius, color);
                 out_pos += out_step;
             }
         }
