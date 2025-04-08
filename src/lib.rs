@@ -272,7 +272,7 @@ impl Graph {
 
                 // Check for the closest socket.
                 let closest_socket = match ptr_on_graph {
-                    true => find_closest_socket(ptr_graph, graph_rect, layout, &gmem, ui)
+                    true => find_closest_socket(ptr_graph, layout, &gmem, ui)
                         .map(|(socket, _dist_sqrd)| socket),
                     false => None,
                 };
@@ -594,8 +594,7 @@ impl Default for View {
 ///
 /// Returns the socket alongside the squared distance from the socket.
 fn find_closest_socket(
-    pos_screen: egui::Pos2,
-    graph_rect: egui::Rect,
+    pos_graph: egui::Pos2,
     layout: &Layout,
     gmem: &GraphTempMemory,
     ui: &egui::Ui,
@@ -608,6 +607,7 @@ fn find_closest_socket(
         .interact_size
         .x
         .min(ui.spacing().interact_size.y);
+    let visible_rect = ui.clip_rect();
     let socket_radius_sq = socket_radius * socket_radius;
     for (&n_id, &n_graph) in layout {
         // Only check visible nodes.
@@ -617,7 +617,7 @@ fn find_closest_socket(
             Some(&size) => size,
         };
         let rect = egui::Rect::from_min_size(n_screen, size);
-        if !graph_rect.intersects(rect) {
+        if !visible_rect.intersects(rect) {
             continue;
         }
         let sockets = match gmem.sockets.get(&n_id) {
@@ -627,7 +627,7 @@ fn find_closest_socket(
 
         // Check inputs.
         for (ix, (p, _)) in sockets.inputs().enumerate() {
-            let dist_sq = pos_screen.distance_sq(p);
+            let dist_sq = pos_graph.distance_sq(p);
             if dist_sq < socket_radius_sq {
                 let socket = node::Socket {
                     node: n_id,
@@ -644,7 +644,7 @@ fn find_closest_socket(
 
         // Check outputs.
         for (ix, (p, _)) in sockets.outputs().enumerate() {
-            let dist_sq = pos_screen.distance_sq(p);
+            let dist_sq = pos_graph.distance_sq(p);
             if dist_sq < socket_radius_sq {
                 let socket = node::Socket {
                     node: n_id,
@@ -810,7 +810,7 @@ fn paint_dot_grid(visible_rect: egui::Rect, ui: &mut egui::Ui) {
 }
 
 // Paint the background rect.
-fn paint_background(graph_rect: egui::Rect, ui: &mut egui::Ui) {
+fn paint_background(visible_rect: egui::Rect, ui: &mut egui::Ui) {
     let vis = ui.style().noninteractive();
     let stroke = egui::Stroke {
         width: 0.0,
@@ -818,7 +818,7 @@ fn paint_background(graph_rect: egui::Rect, ui: &mut egui::Ui) {
     };
     let fill = vis.bg_fill;
     ui.painter()
-        .rect(graph_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
+        .rect(visible_rect, 0.0, fill, stroke, egui::StrokeKind::Inside);
 }
 
 /// Paint the selection area rectangle.
