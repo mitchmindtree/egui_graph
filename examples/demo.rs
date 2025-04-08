@@ -27,6 +27,7 @@ struct State {
     auto_layout: bool,
     node_spacing: [f32; 2],
     node_id_map: HashMap<egui::Id, NodeIndex>,
+    center_view: bool,
 }
 
 #[derive(Default)]
@@ -72,6 +73,7 @@ impl App {
             auto_layout: true,
             node_spacing: [1.0, 1.0],
             node_id_map: Default::default(),
+            center_view: false,
         };
         let view = Default::default();
         App { view, state }
@@ -154,10 +156,12 @@ fn gui(ctx: &egui::Context, view: &mut egui_graph::View, state: &mut State) {
 }
 
 fn graph(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut State) {
-    egui_graph::Graph::new("Demo Graph").show(view, ui, |ui, show| {
-        show.nodes(ui, |nctx, ui| nodes(nctx, ui, state))
-            .edges(ui, |ectx, ui| edges(ectx, ui, state));
-    });
+    egui_graph::Graph::new("Demo Graph")
+        .center_view(state.center_view)
+        .show(view, ui, |ui, show| {
+            show.nodes(ui, |nctx, ui| nodes(nctx, ui, state))
+                .edges(ui, |ectx, ui| edges(ectx, ui, state));
+        });
 }
 
 fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) {
@@ -353,6 +357,7 @@ fn graph_config(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut Stat
                     }
                 });
             });
+            ui.checkbox(&mut state.center_view, "Center View");
             ui.horizontal(|ui| {
                 ui.label("Flow:");
                 ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");

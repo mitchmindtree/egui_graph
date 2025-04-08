@@ -15,6 +15,7 @@ pub struct Graph {
     background: bool,
     zoom_range: egui::Rangef,
     max_inner_size: Option<egui::Vec2>,
+    center_view: bool,
     id: egui::Id,
 }
 
@@ -183,6 +184,7 @@ impl Graph {
         min: 0.25,
         max: 1.0,
     };
+    pub const DEFAULT_CENTER_VIEW: bool = false;
 
     /// Begin building the new graph widget.
     pub fn new(id_src: impl Hash) -> Self {
@@ -190,6 +192,7 @@ impl Graph {
             background: true,
             zoom_range: Self::DEFAULT_ZOOM_RANGE,
             max_inner_size: None,
+            center_view: Self::DEFAULT_CENTER_VIEW,
             id: id(id_src),
         }
     }
@@ -217,6 +220,14 @@ impl Graph {
         self
     }
 
+    /// Whether or not to center the view around the content of the graph.
+    ///
+    /// Default: [Self::DEFAULT_CENTER_VIEW].
+    pub fn center_view(mut self, center_view: bool) -> Self {
+        self.center_view = center_view;
+        self
+    }
+
     /// Begin showing the parts of the Graph.
     pub fn show(
         self,
@@ -239,6 +250,9 @@ impl Graph {
         if let Some(max_inner_size) = self.max_inner_size {
             scene = scene.max_inner_size(max_inner_size);
         }
+
+        // Track the bounding area of all widgets in the scene.
+        let mut bounding_rect = None;
 
         scene.show(ui, scene_rect, |ui| {
             // Draw the selection rectangle if there is one.
@@ -337,7 +351,14 @@ impl Graph {
             content(ui, show);
 
             prune_unused_nodes(self.id, &visited, ui);
+            bounding_rect = Some(ui.min_rect());
         });
+
+        if self.center_view {
+            if let Some(rect) = bounding_rect {
+                view.scene_rect = rect.expand(rect.width() * 0.1);
+            }
+        }
     }
 }
 
