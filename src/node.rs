@@ -293,8 +293,9 @@ impl Node {
         let scene_layer = ui.layer_id();
         let frame_layer = egui::LayerId::new(scene_layer.order, self.id);
         ui.ctx().set_sublayer(scene_layer, frame_layer);
-        ui.ctx()
-            .set_transform_layer(frame_layer, ctx.scene_to_global);
+        if let Some(transform) = ui.ctx().layer_transform_to_global(scene_layer) {
+            ui.ctx().set_transform_layer(frame_layer, transform);
+        }
 
         // A `Ui` scope for placing the `Frame`.
         let builder = egui::UiBuilder::new()

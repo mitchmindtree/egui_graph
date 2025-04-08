@@ -129,9 +129,6 @@ pub struct Show<'a> {
     /// We will use this to remove old node state on `drop`.
     visited: &'a mut HashSet<egui::Id>,
     layout: &'a mut Layout,
-    /// The transform for the graph's scene,
-    /// used for setting the node sublayer transform.
-    scene_to_global: egui::emath::TSTransform,
 }
 
 /// Information about the inputs and outputs for a particular node.
@@ -159,7 +156,6 @@ pub struct NodesCtx<'a> {
     socket_press_released: Option<node::Socket>,
     visited: &'a mut HashSet<egui::Id>,
     layout: &'a mut Layout,
-    scene_to_global: egui::emath::TSTransform,
 }
 
 /// A context to assist with the instantiation of edge widgets.
@@ -259,12 +255,6 @@ impl Graph {
             let gmem_arc = memory(ui, self.id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
 
-            // Determine the transform for node dragging and the node frame
-            // layer.
-            let visible_rect = ui.clip_rect();
-            let scene_to_global =
-                fit_to_rect_in_scene(graph_rect, visible_rect, self.zoom_range.clone().into());
-
             // FIXME: Here we grab the global pointer and transform its position
             // to the graph scene space in order to check for initialising node
             // drag events. However, doing this means we run the risk of
@@ -274,7 +264,11 @@ impl Graph {
             // interacting with the scene or any of its child nodes somehow.
             let pointer = ui.input(|i| i.pointer.clone());
             if let Some(ptr_global) = pointer.interact_pos().or(pointer.hover_pos()) {
-                let ptr_graph = scene_to_global.inverse().mul_pos(ptr_global);
+                let ptr_graph = ui
+                    .ctx()
+                    .layer_transform_from_global(ui.layer_id())
+                    .unwrap_or_default()
+                    .mul_pos(ptr_global);
 
                 // Check for the closest socket.
                 let closest_socket = match ptr_on_graph {
@@ -319,6 +313,7 @@ impl Graph {
             }
 
             // Paint the background rect.
+            let visible_rect = ui.clip_rect();
             if self.background {
                 paint_background(visible_rect, ui);
             }
@@ -342,7 +337,6 @@ impl Graph {
                 socket_press_released,
                 visited: &mut visited,
                 layout,
-                scene_to_global,
             };
 
             // Drop the lock before running the content.
@@ -417,7 +411,6 @@ impl<'a> Show<'a> {
                 socket_press_released,
                 ref mut visited,
                 ref mut layout,
-                scene_to_global,
                 ..
             } = self;
             let mut ctx = NodesCtx {
@@ -428,7 +421,6 @@ impl<'a> Show<'a> {
                 socket_press_released,
                 visited: &mut *visited,
                 layout: &mut *layout,
-                scene_to_global,
             };
             content(&mut ctx, ui);
         }
@@ -857,34 +849,4 @@ fn memory(ui: &egui::Ui, graph_id: egui::Id) -> Arc<Mutex<GraphTempMemory>> {
         d.get_temp_mut_or_default::<Arc<Mutex<GraphTempMemory>>>(graph_id)
             .clone()
     })
-}
-
-// Copied directly from egui/containers/scene.rs.
-// FIXME: remove this if/when egui #5884 lands in favour of using
-// `ui.ctx().layer_transform_to_global(scene_layer)`.
-// This is just a hack to get the `TSTransform` of the scene
-// without the added frame of latency.
-fn fit_to_rect_in_scene(
-    rect_in_global: egui::Rect,
-    rect_in_scene: egui::Rect,
-    zoom_range: egui::Rangef,
-) -> egui::emath::TSTransform {
-    // Compute the scale factor to fit the bounding rectangle into the available
-    // screen size:
-    let scale = rect_in_global.size() / rect_in_scene.size();
-
-    // Use the smaller of the two scales to ensure the whole rectangle fits on
-    // the screen:
-    let scale = scale.min_elem();
-
-    // Clamp scale to what is allowed
-    let scale = zoom_range.clamp(scale);
-
-    // Compute the translation to center the bounding rect in the screen:
-    let center_in_global = rect_in_global.center().to_vec2();
-    let center_scene = rect_in_scene.center().to_vec2();
-
-    // Set the transformation to scale and then translate to center.
-    egui::emath::TSTransform::from_translation(center_in_global - scale * center_scene)
-        * egui::emath::TSTransform::from_scaling(scale)
 }
