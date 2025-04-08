@@ -293,8 +293,6 @@ impl Node {
         let scene_layer = ui.layer_id();
         let frame_layer = egui::LayerId::new(scene_layer.order, self.id);
         ui.ctx().set_sublayer(scene_layer, frame_layer);
-        // let transform = ui.ctx().layer_transform_to_global(scene_layer).unwrap();
-        // ui.ctx().set_transform_layer(frame_layer, transform);
         ui.ctx()
             .set_transform_layer(frame_layer, ctx.scene_to_global);
 
@@ -346,8 +344,7 @@ impl Node {
                     selected = true;
                     // We must initialize gmem.pressed here so that subsequent drag updates work correctly.
                     if gmem.pressed.is_none() {
-                        let ptr_screen = ui.input(|i| i.pointer.hover_pos()).unwrap_or_default();
-                        let ptr_graph = ptr_screen;
+                        let ptr_graph = response.hover_pos().unwrap_or_default();
                         gmem.pressed = Some(crate::Pressed {
                             over_selection_at_origin: true,
                             origin_pos: ptr_graph,

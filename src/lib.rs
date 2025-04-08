@@ -237,7 +237,9 @@ impl Graph {
         } = *view;
 
         // Create the Scene.
-        let mut scene = egui::containers::Scene::new().zoom_range(self.zoom_range.clone());
+        let mut scene = egui::containers::Scene::new()
+            .zoom_range(self.zoom_range.clone())
+            .drag_pan_buttons(egui::containers::DragPanButtons::MIDDLE);
         if let Some(max_inner_size) = self.max_inner_size {
             scene = scene.max_inner_size(max_inner_size);
         }
@@ -248,8 +250,10 @@ impl Graph {
             let mut select = false;
             let mut socket_press_released = None;
 
+            // Check for interactions with the scene area.
+            let scene_response = ui.response();
             let ptr_in_use = ui.ctx().is_using_pointer();
-            let ptr_on_graph = ui.rect_contains_pointer(graph_rect);
+            let ptr_on_graph = scene_response.hovered();
 
             // Check for selection rectangle and node dragging.
             let gmem_arc = memory(ui, self.id);
@@ -261,8 +265,17 @@ impl Graph {
             let scene_to_global =
                 fit_to_rect_in_scene(graph_rect, visible_rect, self.zoom_range.clone().into());
 
+            // FIXME: Here we grab the global pointer and transform its position
+            // to the graph scene space in order to check for initialising node
+            // drag events. However, doing this means we run the risk of
+            // incorrectly responding to events that should be captured by
+            // widgets floating above (like a window floating above the graph).
+            // We should change this to get the pointer only if it is hovered or
+            // interacting with the scene or any of its child nodes somehow.
             let pointer = ui.input(|i| i.pointer.clone());
-            if let Some(ptr_graph) = pointer.interact_pos().or(pointer.hover_pos()) {
+            if let Some(ptr_global) = pointer.interact_pos().or(pointer.hover_pos()) {
+                let ptr_graph = scene_to_global.inverse().mul_pos(ptr_global);
+
                 // Check for the closest socket.
                 let closest_socket = match ptr_on_graph {
                     true => find_closest_socket(ptr_graph, graph_rect, layout, &gmem, ui)
@@ -276,7 +289,6 @@ impl Graph {
                     &gmem.node_sizes,
                     &gmem.selection,
                     layout,
-                    &scene_to_global,
                     &pointer,
                     closest_socket,
                     ptr_in_use,
@@ -665,7 +677,6 @@ fn graph_interaction(
     node_sizes: &NodeSizes,
     selection: &Selection,
     layout: &Layout,
-    scene_to_global: &egui::emath::TSTransform,
     pointer: &egui::PointerState,
     closest_socket: Option<node::Socket>,
     ptr_in_use: bool,
@@ -686,7 +697,7 @@ fn graph_interaction(
                 node: Some(ref node),
             } => {
                 // Determine the drag delta.
-                let delta = (ptr_graph - pressed.origin_pos) / scene_to_global.scaling;
+                let delta = ptr_graph - pressed.origin_pos;
                 let target = node.position_at_origin + delta;
                 if let Some(current) = layout.get(&node.id) {
                     drag_nodes_delta = target - *current;
@@ -715,10 +726,9 @@ fn graph_interaction(
             })
         }
     // Check for the beginning of a socket press or rectangular selection.
-    } else if !ptr_in_use
-        && ptr_on_graph
+    } else if ptr_on_graph
         && pointer.button_down(egui::PointerButton::Primary)
-        && pointer.any_pressed()
+        && pointer.button_pressed(egui::PointerButton::Primary)
     {
         // Choose which press action based on whether or not a socket was pressed.
         let action = match closest_socket {
