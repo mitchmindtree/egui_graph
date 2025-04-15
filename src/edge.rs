@@ -11,7 +11,7 @@ use crate::{bezier, EdgesCtx};
 /// - Hovered: `ui.visuals().widgets.hovered.fg_stroke`.
 /// - Otherwise: `ui.visuals().widgets.noninteractive.fg_stroke`.
 pub struct Edge<'a> {
-    edge: ((egui::Id, OutputIx), (egui::Id, SocketIx)),
+    edge: ((egui::Id, OutputIx), (egui::Id, InputIx)),
     distance_per_point: f32,
     selected: &'a mut bool,
 }
