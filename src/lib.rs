@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 pub use layout::layout;
 
 pub mod bezier;
+pub mod edge;
 #[cfg(feature = "layout")]
 pub mod layout;
 pub mod node;
@@ -49,8 +50,6 @@ type NodeSizes = HashMap<egui::Id, egui::Vec2>;
 struct Selection {
     /// The set of currently selected nodes.
     nodes: HashSet<egui::Id>,
-    /// The set of currently selected edges.
-    edges: HashSet<(node::Socket, node::Socket)>,
 }
 
 /// State related to the last press of the primary pointer button over the graph.
@@ -115,7 +114,7 @@ pub struct Show<'a> {
     graph_id: egui::Id,
     /// The full area covered by the `Graph` within the UI.
     graph_rect: egui::Rect,
-    /// If a selection is being performed with the mouse, this is the covered area.
+    /// If a selection is being performed with the pointer, this is the covered area.
     selection_rect: Option<egui::Rect>,
     /// Whether or not the primary mouse button was just released to perform the selection.
     select: bool,
@@ -159,6 +158,7 @@ pub struct NodesCtx<'a> {
 pub struct EdgesCtx {
     graph_id: egui::Id,
     graph_rect: egui::Rect,
+    selection_rect: Option<egui::Rect>,
 }
 
 /// The set of detected graph interaction for a single graph widget update prior
@@ -452,11 +452,13 @@ impl<'a> Show<'a> {
             let Self {
                 graph_rect,
                 graph_id,
+                selection_rect,
                 ..
             } = self;
             let mut ctx = EdgesCtx {
                 graph_id,
                 graph_rect,
+                selection_rect,
             };
             content(&mut ctx, ui);
         }
@@ -594,6 +596,19 @@ impl EdgeInProgress {
         let end = (self.end_pos, end_normal);
         bezier::Cubic::from_edge_points(start, end)
     }
+
+    /// Short-hand for painting the in-progress edge with some reasonable defaults.
+    ///
+    /// If you require custom styling of the in-progress edge, use
+    /// [`EdgeInProgress::bezier_cubic`] or the individual fields to paint it
+    /// however you wish.
+    pub fn show(&self, ui: &egui::Ui) {
+        let dist_per_pt = crate::edge::Edge::DEFAULT_DISTANCE_PER_POINT;
+        let bezier = self.bezier_cubic();
+        let pts = bezier.flatten(dist_per_pt).collect();
+        let stroke = ui.visuals().widgets.active.fg_stroke;
+        ui.painter().add(egui::Shape::line(pts, stroke));
+    }
 }
 
 impl Default for View {
@@ -714,7 +729,7 @@ fn graph_interaction(
         }
 
         // The press action has ended.
-        if pointer.any_released() && !pointer.button_down(egui::PointerButton::Primary) {
+        if pointer.primary_released() {
             match pressed.action {
                 PressAction::Select => select = true,
                 PressAction::Socket(socket) => socket_press_released = Some(socket),

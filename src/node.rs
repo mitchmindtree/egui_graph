@@ -239,14 +239,14 @@ impl Node {
         let mut selection_changed = false;
 
         // Determine whether or not this node is within the selection rect.
+        // If `shift` is down, rectangle selection is reserved for edges.
         // NOTE: We use the size from last frame as we don't know the size until
         // the user's content is added... Is there a better way to handle this?
         let (mut selected, in_selection_rect) = {
             let gmem_arc = crate::memory(ui, ctx.graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
             let in_selection_rect = match ctx.selection_rect {
-                None => false,
-                Some(sel_rect) => {
+                Some(sel_rect) if ui.input(|i| !i.modifiers.shift) => {
                     let size = gmem
                         .node_sizes
                         .get(&self.id)
@@ -255,11 +255,12 @@ impl Node {
                     let rect = egui::Rect::from_min_size(pos_graph, size);
                     sel_rect.intersects(rect)
                 }
+                _ => false,
             };
 
             // Update the selection if the primary mouse button was just released.
             if ctx.select {
-                if in_selection_rect {
+                if in_selection_rect && ui.input(|i| !i.modifiers.shift) {
                     if gmem.selection.nodes.insert(self.id) {
                         selection_changed = true;
                     }
