@@ -50,8 +50,6 @@ type NodeSizes = HashMap<egui::Id, egui::Vec2>;
 struct Selection {
     /// The set of currently selected nodes.
     nodes: HashSet<egui::Id>,
-    /// The set of currently selected edges.
-    edges: HashSet<(node::Socket, node::Socket)>,
 }
 
 /// State related to the last press of the primary pointer button over the graph.
