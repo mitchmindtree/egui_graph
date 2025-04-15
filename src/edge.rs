@@ -71,7 +71,7 @@ impl<'a> Edge<'a> {
         let a_out = ectx.output(ui, a, output).unwrap();
         let b_in = ectx.input(ui, b, input).unwrap();
 
-        // TODO: Cache the curve and its points.
+        // TODO: Cache the curve and its points?
         let bezier = bezier::Cubic::from_edge_points(a_out, b_in);
 
         // Check the graph `Ui` for interaction.
@@ -88,6 +88,10 @@ impl<'a> Edge<'a> {
         let hovered = dist_to_mouse < select_dist;
         let clicked = hovered && response.clicked();
         let old_selected = *selected;
+        let under_selection_rect = ectx
+            .selection_rect
+            .map(|rect| bezier.intersects_rect(distance_per_point, rect))
+            .unwrap_or(false);
 
         // If already selected and clicked with ctrl down, or a press happened
         // elsewhere and ctrl was *not* held, deselect.
@@ -99,6 +103,11 @@ impl<'a> Edge<'a> {
             }
         // Otherwise if clicked, select.
         } else if clicked {
+            *selected = true;
+        // Otherwise, check if a selection rect would indicate selection.
+        } else if under_selection_rect
+            && ui.input(|i| i.modifiers.shift && i.pointer.primary_released())
+        {
             *selected = true;
         }
 
@@ -123,11 +132,13 @@ impl<'a> Edge<'a> {
             deleted,
         };
 
-        // Paint the edge.
+        // Paint the edge based on the interaction.
         let pts: Vec<_> = bezier.flatten(distance_per_point).collect();
         let stroke = if *selected {
             ui.style().visuals.selection.stroke
         } else if hovered {
+            ui.style().visuals.widgets.hovered.fg_stroke
+        } else if under_selection_rect && ui.input(|i| i.modifiers.shift) {
             ui.style().visuals.widgets.hovered.fg_stroke
         } else {
             ui.style().visuals.widgets.noninteractive.fg_stroke

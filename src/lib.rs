@@ -116,7 +116,7 @@ pub struct Show<'a> {
     graph_id: egui::Id,
     /// The full area covered by the `Graph` within the UI.
     graph_rect: egui::Rect,
-    /// If a selection is being performed with the mouse, this is the covered area.
+    /// If a selection is being performed with the pointer, this is the covered area.
     selection_rect: Option<egui::Rect>,
     /// Whether or not the primary mouse button was just released to perform the selection.
     select: bool,
@@ -160,6 +160,7 @@ pub struct NodesCtx<'a> {
 pub struct EdgesCtx {
     graph_id: egui::Id,
     graph_rect: egui::Rect,
+    selection_rect: Option<egui::Rect>,
 }
 
 /// The set of detected graph interaction for a single graph widget update prior
@@ -453,11 +454,13 @@ impl<'a> Show<'a> {
             let Self {
                 graph_rect,
                 graph_id,
+                selection_rect,
                 ..
             } = self;
             let mut ctx = EdgesCtx {
                 graph_id,
                 graph_rect,
+                selection_rect,
             };
             content(&mut ctx, ui);
         }
