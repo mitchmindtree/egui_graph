@@ -92,11 +92,13 @@ impl<'a> Edge<'a> {
             .selection_rect
             .map(|rect| bezier.intersects_rect(distance_per_point, rect))
             .unwrap_or(false);
+        let edge_in_progress = ectx.in_progress(ui).is_some();
 
         // If already selected and clicked with ctrl down, or a press happened
         // elsewhere and ctrl was *not* held, deselect.
         if *selected {
-            if (clicked && ui.input(|i| i.modifiers.ctrl))
+            if edge_in_progress
+                || (clicked && ui.input(|i| i.modifiers.ctrl))
                 || ui.input(|i| i.pointer.primary_pressed() && !i.modifiers.ctrl)
             {
                 *selected = false;
@@ -136,7 +138,7 @@ impl<'a> Edge<'a> {
         let pts: Vec<_> = bezier.flatten(distance_per_point).collect();
         let stroke = if *selected {
             ui.style().visuals.selection.stroke
-        } else if hovered {
+        } else if hovered && !edge_in_progress {
             ui.style().visuals.widgets.hovered.fg_stroke
         } else if under_selection_rect && ui.input(|i| i.modifiers.shift) {
             ui.style().visuals.widgets.hovered.fg_stroke
@@ -166,7 +168,7 @@ impl EdgeResponse {
         self.hovered
     }
 
-    /// The edge was selected while `Delete` or `Backspace` where pressed.
+    /// The edge was selected while `Delete` or `Backspace` were pressed.
     pub fn deleted(&self) -> bool {
         self.deleted
     }
