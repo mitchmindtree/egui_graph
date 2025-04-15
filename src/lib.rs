@@ -729,7 +729,7 @@ fn graph_interaction(
         }
 
         // The press action has ended.
-        if pointer.any_released() && !pointer.button_down(egui::PointerButton::Primary) {
+        if pointer.primary_released() {
             match pressed.action {
                 PressAction::Select => select = true,
                 PressAction::Socket(socket) => socket_press_released = Some(socket),
