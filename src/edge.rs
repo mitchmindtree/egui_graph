@@ -85,14 +85,16 @@ impl<'a> Edge<'a> {
         let closest_point = bezier.closest_point(distance_per_point, mouse_pos);
         let dist_to_mouse = closest_point.distance(mouse_pos);
         let select_dist = ui.style().interaction.interact_radius;
-        let hovered = dist_to_mouse < select_dist;
+        let edge_in_progress = ectx.in_progress(ui).is_some();
+        let hovered = dist_to_mouse < select_dist
+            && !edge_in_progress
+            && ui.input(|i| !i.pointer.primary_down() || i.pointer.could_any_button_be_click());
         let clicked = hovered && response.clicked();
         let old_selected = *selected;
         let under_selection_rect = ectx
             .selection_rect
             .map(|rect| bezier.intersects_rect(distance_per_point, rect))
             .unwrap_or(false);
-        let edge_in_progress = ectx.in_progress(ui).is_some();
 
         // If already selected and clicked with ctrl down, or a press happened
         // elsewhere and ctrl was *not* held, deselect.
@@ -138,7 +140,7 @@ impl<'a> Edge<'a> {
         let pts: Vec<_> = bezier.flatten(distance_per_point).collect();
         let stroke = if *selected {
             ui.style().visuals.selection.stroke
-        } else if hovered && !edge_in_progress {
+        } else if hovered {
             ui.style().visuals.widgets.hovered.fg_stroke
         } else if under_selection_rect && ui.input(|i| i.modifiers.shift) {
             ui.style().visuals.widgets.hovered.fg_stroke
