@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 pub use layout::layout;
 
 pub mod bezier;
+pub mod edge;
 #[cfg(feature = "layout")]
 pub mod layout;
 pub mod node;
