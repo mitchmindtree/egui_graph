@@ -10,12 +10,14 @@ repository = "https://github.com/nannou-org/nannou.git"
 resolver = "2"
 
 [dependencies]
-egui = { version = "0.31.1", default-features = false, optional = true }
+# egui = { version = "0.31.1", default-features = false, optional = true }
+egui = { git = "https://github.com/mitchmindtree/egui.git", branch = "scene-drag-pan-buttons", default-features = false, optional = true }
 layout-rs = { version = "0.1", optional = true }
 serde = { version = "1.0", optional = true }
 
 [dev-dependencies]
-eframe = "0.31.1"
+# eframe = "0.31.1"
+eframe = { git = "https://github.com/mitchmindtree/egui.git", branch = "scene-drag-pan-buttons" }
 env_logger = "0.10"
 petgraph = "0.6"
 
