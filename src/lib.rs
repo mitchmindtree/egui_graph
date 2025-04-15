@@ -596,6 +596,19 @@ impl EdgeInProgress {
         let end = (self.end_pos, end_normal);
         bezier::Cubic::from_edge_points(start, end)
     }
+
+    /// Short-hand for painting the in-progress edge with some reasonable defaults.
+    ///
+    /// If you require custom styling of the in-progress edge, use
+    /// [`EdgeInProgress::bezier_cubic`] or the individual fields to paint it
+    /// however you wish.
+    pub fn show(&self, ui: &egui::Ui) {
+        let dist_per_pt = crate::edge::Edge::DEFAULT_DISTANCE_PER_POINT;
+        let bezier = self.bezier_cubic();
+        let pts = bezier.flatten(dist_per_pt).collect();
+        let stroke = ui.visuals().widgets.active.fg_stroke;
+        ui.painter().add(egui::Shape::line(pts, stroke));
+    }
 }
 
 impl Default for View {

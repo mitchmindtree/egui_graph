@@ -298,11 +298,7 @@ fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) 
 
     // Draw the in-progress edge if there is one.
     if let Some(edge) = ectx.in_progress(ui) {
-        let bezier = edge.bezier_cubic();
-        let dist_per_pt = 5.0;
-        let pts = bezier.flatten(dist_per_pt).collect();
-        let stroke = ui.visuals().widgets.active.fg_stroke;
-        ui.painter().add(egui::Shape::line(pts, stroke));
+        edge.show(ui);
     }
 }
 
