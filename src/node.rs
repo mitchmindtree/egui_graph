@@ -300,10 +300,13 @@ impl Node {
         }
 
         // A `Ui` scope for placing the `Frame`.
-        let builder = egui::UiBuilder::new()
+        let mut builder = egui::UiBuilder::new()
             .max_rect(put_rect)
             .layer_id(frame_layer)
             .sense(egui::Sense::click_and_drag());
+        // NOTE: We set the `id_salt` manually here, as if we use the builder
+        // method it uses the *hash* of our id rather than our id directly.
+        builder.id_salt = Some(self.id);
         let inner_response = ui.scope_builder(builder, |ui| {
             // Show the frame.
             let inner_response = frame.show(ui, |ui| {
@@ -322,9 +325,14 @@ impl Node {
             });
 
             // Merge the content area response with the frame response.
-            inner_response.response.union(inner_response.inner)
+            let content_response = inner_response.inner;
+            let content_id = content_response.id;
+            let response = inner_response.response.union(content_response);
+            (response, content_id)
         });
-        let mut response = inner_response.response.union(inner_response.inner);
+        let (frame_response, content_id) = inner_response.inner;
+        let frame_id = frame_response.id;
+        let mut response = inner_response.response.union(frame_response);
 
         // Update the stored data for this node and check for edge events.
         let mut edge_event = None;
@@ -332,12 +340,13 @@ impl Node {
             let gmem_arc = crate::memory(ui, ctx.graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
             gmem.node_sizes.insert(self.id, response.rect.size());
+            gmem.node_response_ids.insert(self.id, [response.id, frame_id, content_id]);
 
             let ctrl_down = ui.input(|i| i.modifiers.ctrl);
 
             // If the window is pressed, select the node.
             let pointer = &ui.input(|i| i.pointer.clone());
-            if response.is_pointer_button_down_on() && primary_pressed(pointer) {
+            if response.is_pointer_button_down_on() && pointer.primary_pressed() {
                 // If ctrl is down, check for deselection.
                 let was_selected = gmem.selection.nodes.contains(&self.id);
                 if ctrl_down && was_selected {
@@ -368,7 +377,7 @@ impl Node {
                 }
 
             // If the primary button was pressed, check for edge events.
-            } else if !response.is_pointer_button_down_on() && primary_pressed(pointer) {
+            } else if !response.is_pointer_button_down_on() && pointer.primary_pressed() {
                 // If this node's socket was pressed, create a start event.
                 if let Some(ref pressed) = gmem.pressed {
                     if let crate::PressAction::Socket(socket) = pressed.action {
@@ -398,7 +407,7 @@ impl Node {
                 if let Some(c) = gmem.closest_socket {
                     if r.kind == c.kind && self.id == r.node {
                         edge_event = Some(EdgeEvent::Cancelled);
-                    } else if self.id == c.node && primary_released(&ui.input(|i| i.clone())) {
+                    } else if self.id == c.node && ui.input(|i| i.pointer.primary_released()) {
                         let kind = c.kind;
                         let index = c.index;
                         edge_event = Some(EdgeEvent::Ended { kind, index });
@@ -625,26 +634,4 @@ pub fn default_frame(style: &egui::Style) -> egui::Frame {
     frame.shadow.spread = (frame.shadow.spread as f32 * 0.25) as u8;
     frame.stroke.width = 0.0;
     frame
-}
-
-fn only_primary_down(pointer: &egui::PointerState) -> bool {
-    pointer.button_down(egui::PointerButton::Primary)
-        && !pointer.button_down(egui::PointerButton::Middle)
-        && !pointer.button_down(egui::PointerButton::Secondary)
-}
-
-fn primary_pressed(pointer: &egui::PointerState) -> bool {
-    pointer.any_pressed() && only_primary_down(pointer)
-}
-
-fn primary_released(input: &egui::InputState) -> bool {
-    input.pointer.any_released()
-        && input.events.iter().any(|e| match e {
-            egui::Event::PointerButton {
-                button: egui::PointerButton::Primary,
-                pressed: false,
-                ..
-            } => true,
-            _ => false,
-        })
 }
