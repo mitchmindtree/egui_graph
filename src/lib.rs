@@ -28,6 +28,14 @@ pub struct GraphTempMemory {
     /// Primarily used to check for node selection, as we don't know the size of the node until the
     /// contents have been instantiated.
     node_sizes: NodeSizes,
+    /// A mapping from node IDs to their most recent `Response` IDs.
+    ///
+    /// Includes the response ID for the node's outer scope `Ui`, the `Frame`,
+    /// and content UI.
+    ///
+    /// This is used to check whether or not the pointer is over either the
+    /// graph or node prior to calling `graph_interaction`.
+    node_response_ids: NodeResponseIds,
     /// The currently selected nodes and edges.
     selection: Selection,
     /// Whether or not the primary button was pressed on the graph area and is still down.
@@ -45,6 +53,7 @@ pub struct GraphTempMemory {
 }
 
 type NodeSizes = HashMap<egui::Id, egui::Vec2>;
+type NodeResponseIds = HashMap<egui::Id, [egui::Id; 3]>;
 
 #[derive(Clone, Default)]
 struct Selection {
@@ -88,7 +97,7 @@ enum PressAction {
 
 #[derive(Clone, Debug)]
 struct PressedNode {
-    /// Unique Id of th node.
+    /// Unique Id of the node.
     id: egui::Id,
     /// The position of the node over the graph at the origin of the press.
     position_at_origin: egui::Pos2,
@@ -263,8 +272,18 @@ impl Graph {
             let ptr_on_graph = scene_response.hovered();
 
             // Check for selection rectangle and node dragging.
-            let gmem_arc = memory(ui, self.id);
+            let graph_id = self.id;
+            let gmem_arc = memory(ui, graph_id);
             let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
+
+            // The pointer location if its over the graph or one of its nodes.
+            let graph_or_node_pos = {
+                let graph_id = ui.unique_id(); // Ui's respond with `unique_id`.
+                let node_ids = gmem.node_response_ids.values().flat_map(|ids| ids.clone());
+                graph_or_node_response(ui.ctx(), graph_id, node_ids, |res| {
+                    res.interact_pointer_pos().or_else(|| res.hover_pos())
+                })
+            };
 
             // FIXME: Here we grab the global pointer and transform its position
             // to the graph scene space in order to check for initialising node
@@ -274,17 +293,14 @@ impl Graph {
             // We should change this to get the pointer only if it is hovered or
             // interacting with the scene or any of its child nodes somehow.
             let pointer = ui.input(|i| i.pointer.clone());
-            if let Some(ptr_global) = pointer.interact_pos().or(pointer.hover_pos()) {
-                let ptr_graph = ui
-                    .ctx()
-                    .layer_transform_from_global(ui.layer_id())
-                    .unwrap_or_default()
-                    .mul_pos(ptr_global);
-
+            if let Some(ptr_graph) = graph_or_node_pos {
                 // Check for the closest socket.
-                let closest_socket = ui.response().hover_pos().and_then(|pos| {
-                    find_closest_socket(pos, layout, &gmem, ui).map(|(socket, _dist_sqrd)| socket)
-                });
+                // FIXME: Rather than using `response.hover_pos()` which won't
+                // give the pointer if the mouse is over a node, we instead want
+                // to get the pointer if it's anywhere over a graph *or node*.
+                let closest_socket =
+                    find_closest_socket(ptr_graph, layout, &gmem, ui)
+                        .map(|(socket, _dist_sqrd)| socket);
 
                 // Check for graph interactions.
                 let interaction = graph_interaction(
@@ -334,7 +350,7 @@ impl Graph {
             let mut visited = HashSet::default();
 
             let show = Show {
-                graph_id: self.id,
+                graph_id,
                 graph_rect,
                 selection_rect,
                 select,
@@ -348,7 +364,7 @@ impl Graph {
 
             let output = content(ui, show);
 
-            prune_unused_nodes(self.id, &visited, ui);
+            prune_unused_nodes(graph_id, &visited, ui);
             bounding_rect = Some(ui.min_rect());
 
             output
@@ -472,6 +488,7 @@ fn prune_unused_nodes(graph_id: egui::Id, visited: &HashSet<egui::Id>, ui: &mut 
     let gmem_arc = memory(ui, graph_id);
     let mut gmem = gmem_arc.lock().expect("failed to lock graph temp memory");
     gmem.node_sizes.retain(|k, _| visited.contains(k));
+    gmem.node_response_ids.retain(|k, _| visited.contains(k));
     gmem.selection.nodes.retain(|k| visited.contains(k));
     if let Some(socket) = gmem.closest_socket.as_ref() {
         if !visited.contains(&socket.node) {
@@ -717,7 +734,9 @@ fn graph_interaction(
                 let delta = ptr_graph - pressed.origin_pos;
                 let target = node.position_at_origin + delta;
                 if let Some(current) = layout.get(&node.id) {
-                    drag_nodes_delta = target - *current;
+                    if pointer.primary_down() {
+                        drag_nodes_delta = target - *current;
+                    }
                 }
             }
             PressAction::Select => {
@@ -743,10 +762,7 @@ fn graph_interaction(
             })
         }
     // Check for the beginning of a socket press or rectangular selection.
-    } else if ptr_on_graph
-        && pointer.button_down(egui::PointerButton::Primary)
-        && pointer.button_pressed(egui::PointerButton::Primary)
-    {
+    } else if ptr_on_graph && pointer.primary_pressed() {
         // Choose which press action based on whether or not a socket was pressed.
         let action = match closest_socket {
             Some(socket) => PressAction::Socket(socket),
@@ -842,4 +858,29 @@ fn memory(ui: &egui::Ui, graph_id: egui::Id) -> Arc<Mutex<GraphTempMemory>> {
         d.get_temp_mut_or_default::<Arc<Mutex<GraphTempMemory>>>(graph_id)
             .clone()
     })
+}
+
+/// Checks the graph, then all the nodes to see if any of their responses
+/// satisfy the given predicate.
+///
+/// Normally used to check if the pointer is hovering above either the graph or
+/// any of its known nodes.
+///
+/// NOTE: Responses for `Ui`s are associated with the `Ui`'s `unique_id`, not
+/// its `id`. This means for graph and nodes, we need to be careful about using
+/// the right `egui::Id`.
+fn graph_or_node_response<R>(
+    ctx: &egui::Context,
+    graph_id: egui::Id,
+    node_ids: impl IntoIterator<Item = egui::Id>,
+    predicate: impl Fn(egui::Response) -> Option<R>,
+) -> Option<R> {
+    for id in Some(graph_id).into_iter().chain(node_ids) {
+        if let Some(res) = ctx.read_response(id) {
+            if let Some(ret) = predicate(res) {
+                return Some(ret);
+            }
+        }
+    }
+    None
 }
