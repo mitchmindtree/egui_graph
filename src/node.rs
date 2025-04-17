@@ -337,7 +337,7 @@ impl Node {
 
             // If the window is pressed, select the node.
             let pointer = &ui.input(|i| i.pointer.clone());
-            if response.is_pointer_button_down_on() && primary_pressed(pointer) {
+            if response.is_pointer_button_down_on() && pointer.primary_pressed() {
                 // If ctrl is down, check for deselection.
                 let was_selected = gmem.selection.nodes.contains(&self.id);
                 if ctrl_down && was_selected {
@@ -368,7 +368,7 @@ impl Node {
                 }
 
             // If the primary button was pressed, check for edge events.
-            } else if !response.is_pointer_button_down_on() && primary_pressed(pointer) {
+            } else if !response.is_pointer_button_down_on() && pointer.primary_pressed() {
                 // If this node's socket was pressed, create a start event.
                 if let Some(ref pressed) = gmem.pressed {
                     if let crate::PressAction::Socket(socket) = pressed.action {
@@ -398,7 +398,7 @@ impl Node {
                 if let Some(c) = gmem.closest_socket {
                     if r.kind == c.kind && self.id == r.node {
                         edge_event = Some(EdgeEvent::Cancelled);
-                    } else if self.id == c.node && primary_released(&ui.input(|i| i.clone())) {
+                    } else if self.id == c.node && ui.input(|i| i.pointer.primary_released()) {
                         let kind = c.kind;
                         let index = c.index;
                         edge_event = Some(EdgeEvent::Ended { kind, index });
@@ -625,26 +625,4 @@ pub fn default_frame(style: &egui::Style) -> egui::Frame {
     frame.shadow.spread = (frame.shadow.spread as f32 * 0.25) as u8;
     frame.stroke.width = 0.0;
     frame
-}
-
-fn only_primary_down(pointer: &egui::PointerState) -> bool {
-    pointer.button_down(egui::PointerButton::Primary)
-        && !pointer.button_down(egui::PointerButton::Middle)
-        && !pointer.button_down(egui::PointerButton::Secondary)
-}
-
-fn primary_pressed(pointer: &egui::PointerState) -> bool {
-    pointer.any_pressed() && only_primary_down(pointer)
-}
-
-fn primary_released(input: &egui::InputState) -> bool {
-    input.pointer.any_released()
-        && input.events.iter().any(|e| match e {
-            egui::Event::PointerButton {
-                button: egui::PointerButton::Primary,
-                pressed: false,
-                ..
-            } => true,
-            _ => false,
-        })
 }
