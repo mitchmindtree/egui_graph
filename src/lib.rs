@@ -118,6 +118,8 @@ pub struct Show<'a> {
     selection_rect: Option<egui::Rect>,
     /// Whether or not the primary mouse button was just released to perform the selection.
     select: bool,
+    /// The closest socket within pressable range of the pointer.
+    closest_socket: Option<node::Socket>,
     /// Whether or not the primary mouse button was just released to end edge creation.
     socket_press_released: Option<node::Socket>,
     /// Track all nodes that were visited this update.
@@ -159,6 +161,7 @@ pub struct EdgesCtx {
     graph_id: egui::Id,
     graph_rect: egui::Rect,
     selection_rect: Option<egui::Rect>,
+    closest_socket: Option<node::Socket>,
 }
 
 /// The set of detected graph interaction for a single graph widget update prior
@@ -256,6 +259,7 @@ impl Graph {
             // Draw the selection rectangle if there is one.
             let mut selection_rect = None;
             let mut select = false;
+            let mut closest_socket = None;
             let mut socket_press_released = None;
 
             // Check for interactions with the scene area.
@@ -282,7 +286,7 @@ impl Graph {
                     .mul_pos(ptr_global);
 
                 // Check for the closest socket.
-                let closest_socket = ui.response().hover_pos().and_then(|pos| {
+                closest_socket = ui.response().hover_pos().and_then(|pos| {
                     find_closest_socket(pos, layout, &gmem, ui).map(|(socket, _dist_sqrd)| socket)
                 });
 
@@ -338,6 +342,7 @@ impl Graph {
                 graph_rect,
                 selection_rect,
                 select,
+                closest_socket,
                 socket_press_released,
                 visited: &mut visited,
                 layout,
@@ -453,12 +458,14 @@ impl<'a> Show<'a> {
                 graph_rect,
                 graph_id,
                 selection_rect,
+                closest_socket,
                 ..
             } = self;
             let mut ctx = EdgesCtx {
                 graph_id,
                 graph_rect,
                 selection_rect,
+                closest_socket,
             };
             content(&mut ctx, ui);
         }

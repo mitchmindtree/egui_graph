@@ -88,6 +88,7 @@ impl<'a> Edge<'a> {
         let edge_in_progress = ectx.in_progress(ui).is_some();
         let hovered = dist_to_mouse < select_dist
             && !edge_in_progress
+            && ectx.closest_socket.is_none()
             && ui.input(|i| !i.pointer.primary_down() || i.pointer.could_any_button_be_click());
         let clicked = hovered && response.clicked();
         let old_selected = *selected;
