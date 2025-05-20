@@ -546,6 +546,7 @@ impl Node {
 
         // If the delete or backspace key was pressed and the node is selected, remove it.
         let removed = if selected
+            && !ui.ctx().wants_keyboard_input()
             && ui.input(|i| i.key_pressed(egui::Key::Delete) | i.key_pressed(egui::Key::Backspace))
         {
             // Remove ourselves from the selection.
