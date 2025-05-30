@@ -153,7 +153,7 @@ impl Node {
         self
     }
 
-    /// Disable automatic deletion when delete/backspace is pressed.
+    /// Enable or disable automatic deletion when delete/backspace is pressed.
     ///
     /// By default, nodes are automatically deleted when selected and delete/backspace is pressed.
     /// Disable this when you have text inputs or other UI elements where backspace should not
