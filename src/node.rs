@@ -16,6 +16,7 @@ pub struct Node {
     socket_color: Option<egui::Color32>,
     max_width: Option<f32>,
     animation_time: f32,
+    auto_delete: bool,
 }
 
 /// Describes either an input or output.
@@ -86,6 +87,7 @@ impl Node {
             flow: egui::Direction::LeftToRight,
             socket_radius: 3.0,
             animation_time: 0.1,
+            auto_delete: true,
         }
     }
 
@@ -148,6 +150,16 @@ impl Node {
     /// Default: `0.1`.
     pub fn animation_time(mut self, time: f32) -> Self {
         self.animation_time = time;
+        self
+    }
+
+    /// Disable automatic deletion when delete/backspace is pressed.
+    ///
+    /// By default, nodes are automatically deleted when selected and delete/backspace is pressed.
+    /// Disable this when you have text inputs or other UI elements where backspace should not
+    /// delete the node (e.g., when editing node properties in a text box).
+    pub fn auto_delete(mut self, enabled: bool) -> Self {
+        self.auto_delete = enabled;
         self
     }
 
@@ -540,7 +552,8 @@ impl Node {
         }
 
         // If the delete or backspace key was pressed and the node is selected, remove it.
-        let removed = if selected
+        let removed = if self.auto_delete
+            && selected
             && ui.input(|i| i.key_pressed(egui::Key::Delete) | i.key_pressed(egui::Key::Backspace))
         {
             // Remove ourselves from the selection.
