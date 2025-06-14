@@ -29,6 +29,7 @@ struct State {
     node_spacing: [f32; 2],
     node_id_map: HashMap<egui::Id, NodeIndex>,
     center_view: bool,
+    dot_grid: bool,
 }
 
 #[derive(Default)]
@@ -76,6 +77,7 @@ impl App {
             node_spacing: [1.0, 1.0],
             node_id_map: Default::default(),
             center_view: false,
+            dot_grid: true,
         };
         let view = Default::default();
         App { view, state }
@@ -160,6 +162,7 @@ fn gui(ctx: &egui::Context, view: &mut egui_graph::View, state: &mut State) {
 fn graph(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut State) {
     egui_graph::Graph::new("Demo Graph")
         .center_view(state.center_view)
+        .dot_grid(state.dot_grid)
         .show(view, ui, |ui, show| {
             show.nodes(ui, |nctx, ui| nodes(nctx, ui, state))
                 .edges(ui, |ectx, ui| {
@@ -327,6 +330,7 @@ fn graph_config(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut Stat
                     }
                 });
             });
+            ui.checkbox(&mut state.dot_grid, "Show Dot Grid");
             ui.checkbox(&mut state.center_view, "Center View");
             ui.horizontal(|ui| {
                 ui.label("Flow:");

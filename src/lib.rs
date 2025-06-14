@@ -14,6 +14,7 @@ pub mod node;
 /// The main interface for the `Graph` widget.
 pub struct Graph {
     background: bool,
+    dot_grid: bool,
     zoom_range: egui::Rangef,
     max_inner_size: Option<egui::Vec2>,
     center_view: bool,
@@ -189,6 +190,7 @@ impl Graph {
     pub fn new(id_src: impl Hash) -> Self {
         Self {
             background: true,
+            dot_grid: true,
             zoom_range: Self::DEFAULT_ZOOM_RANGE,
             max_inner_size: None,
             center_view: Self::DEFAULT_CENTER_VIEW,
@@ -199,6 +201,12 @@ impl Graph {
     /// Whether or not to fill the background. Default is `true`.
     pub fn background(mut self, show: bool) -> Self {
         self.background = show;
+        self
+    }
+
+    /// Whether or not to show the dot grid. Default is `true`.
+    pub fn dot_grid(mut self, show: bool) -> Self {
+        self.dot_grid = show;
         self
     }
 
@@ -327,7 +335,9 @@ impl Graph {
             }
 
             // Paint some subtle dots to check camera movement.
-            paint_dot_grid(visible_rect, ui);
+            if self.dot_grid {
+                paint_dot_grid(visible_rect, ui);
+            }
 
             // Draw the selection area if there is one.
             // TODO: Do this when `Show` is `drop`ped or finalised.
@@ -799,12 +809,7 @@ fn paint_dot_grid(visible_rect: egui::Rect, ui: &mut egui::Ui) {
             let y = y_dot as f32 * dot_step;
             let r = egui::Rect::from_center_size([x, y].into(), [1.0; 2].into());
             let color = vis.bg_stroke.color;
-            let stroke = egui::Stroke {
-                width: 0.0,
-                ..vis.bg_stroke
-            };
-            ui.painter()
-                .rect(r, 0.0, color, stroke, egui::StrokeKind::Inside);
+            ui.painter().circle_filled(r.center(), 0.5, color);
         }
     }
 }
