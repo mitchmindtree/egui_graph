@@ -13,20 +13,23 @@ fn main() -> Result<(), eframe::Error> {
 
 struct App {
     state: State,
+    view: egui_graph::View,
 }
 
 struct State {
     graph: Graph,
-    view: egui_graph::View,
     interaction: Interaction,
     flow: egui::Direction,
     socket_radius: f32,
     socket_color: egui::Color32,
-    wire_width: f32,
-    wire_color: egui::Color32,
+    custom_edge_style: bool,
+    edge_width: f32,
+    edge_color: egui::Color32,
     auto_layout: bool,
     node_spacing: [f32; 2],
     node_id_map: HashMap<egui::Id, NodeIndex>,
+    center_view: bool,
+    dot_grid: bool,
 }
 
 #[derive(Default)]
@@ -63,32 +66,35 @@ impl App {
         let graph = new_graph();
         let state = State {
             graph,
-            view: Default::default(),
             interaction: Default::default(),
             socket_color: ctx.style().visuals.weak_text_color(),
             socket_radius: 3.0,
-            wire_width: 1.0,
-            wire_color: ctx.style().visuals.weak_text_color(),
+            custom_edge_style: false,
+            edge_width: 1.0,
+            edge_color: ctx.style().visuals.weak_text_color(),
             flow: egui::Direction::TopDown,
             auto_layout: true,
             node_spacing: [1.0, 1.0],
             node_id_map: Default::default(),
+            center_view: false,
+            dot_grid: true,
         };
-        App { state }
+        let view = Default::default();
+        App { view, state }
     }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        gui(ctx, &mut self.state);
         if self.state.auto_layout {
-            self.state.view.layout = layout(
+            self.view.layout = layout(
                 &self.state.graph,
                 self.state.flow,
                 self.state.node_spacing,
                 ctx,
             );
         }
+        gui(ctx, &mut self.view, &mut self.state);
     }
 }
 
@@ -144,20 +150,40 @@ fn layout(
     })
 }
 
-fn gui(ctx: &egui::Context, state: &mut State) {
+fn gui(ctx: &egui::Context, view: &mut egui_graph::View, state: &mut State) {
     egui::containers::CentralPanel::default()
         .frame(egui::Frame::default())
         .show(ctx, |ui| {
-            graph_config(ui, state);
-            graph(ui, state);
+            graph_config(ui, view, state);
+            graph(ui, view, state);
         });
 }
 
-fn graph(ui: &mut egui::Ui, state: &mut State) {
+fn graph(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut State) {
     egui_graph::Graph::new("Demo Graph")
-        .show(&mut state.view, ui)
-        .nodes(|nctx, ui| nodes(nctx, ui, state))
-        .edges(|ectx, ui| edges(ectx, ui, state));
+        .center_view(state.center_view)
+        .dot_grid(state.dot_grid)
+        .show(view, ui, |ui, show| {
+            show.nodes(ui, |nctx, ui| nodes(nctx, ui, state))
+                .edges(ui, |ectx, ui| {
+                    if state.custom_edge_style {
+                        set_edge_style(ui.style_mut(), state);
+                    }
+                    edges(ectx, ui, state)
+                });
+        });
+}
+
+fn set_edge_style(style: &mut egui::Style, state: &mut State) {
+    let vis_mut = &mut style.visuals;
+    // Edges use `noninteractive` by default, `hovered` when hovered.
+    vis_mut.widgets.noninteractive.fg_stroke.color = state.edge_color;
+    vis_mut.widgets.noninteractive.fg_stroke.width = state.edge_width;
+    vis_mut.widgets.hovered.fg_stroke.color = state.edge_color.linear_multiply(1.25);
+    vis_mut.widgets.hovered.fg_stroke.width = state.edge_width;
+    // Exaggerate the color and width when selected.
+    vis_mut.selection.stroke.color = state.edge_color.linear_multiply(1.5);
+    vis_mut.selection.stroke.width = state.edge_width * 3.0;
 }
 
 fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) {
@@ -172,7 +198,6 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             .edges_directed(n, petgraph::Outgoing)
             .fold(0, |max, e| std::cmp::max(max, e.weight().0 + 1));
         let node = &mut state.graph[n];
-        let graph_view = &mut state.view;
         let egui_id = egui::Id::new(n);
         state.node_id_map.insert(egui_id, n);
         let response = egui_graph::node::Node::from_id(egui_id)
@@ -181,7 +206,7 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
             .flow(state.flow)
             .socket_radius(state.socket_radius)
             .socket_color(state.socket_color)
-            .show(graph_view, nctx, ui, |ui| match node.kind {
+            .show(nctx, ui, |ui| match node.kind {
                 NodeKind::Label => {
                     ui.label(&node.name);
                 }
@@ -215,7 +240,6 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
 
             // Check for an edge event.
             if let Some(ev) = response.edge_event() {
-                dbg!(&ev);
                 match ev {
                     EdgeEvent::Started { kind, index } => {
                         state.interaction.edge_in_progress = Some((n, kind, index));
@@ -253,80 +277,35 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
 }
 
 fn edges(ectx: &mut egui_graph::EdgesCtx, ui: &mut egui::Ui, state: &mut State) {
-    // Draw the attached edges.
-    let indices: Vec<_> = state.graph.edge_indices().collect();
-    let stroke = egui::Stroke {
-        width: state.wire_width,
-        color: state.wire_color,
-    };
-
-    let mouse_pos = ui.input(|i| i.pointer.interact_pos().unwrap_or_default());
-    let click = ui.input(|i| i.pointer.any_released());
-    let shift_held = ui.input(|i| i.modifiers.shift);
-    let mut clicked_on_edge = false;
-    let selection_threshold = state.wire_width * 8.0; // Threshold for selecting the edge
-
-    for e in indices {
+    // Instantiate all edges.
+    for e in state.graph.edge_indices().collect::<Vec<_>>() {
         let (na, nb) = state.graph.edge_endpoints(e).unwrap();
         let (output, input) = *state.graph.edge_weight(e).unwrap();
         let a = egui::Id::new(na);
         let b = egui::Id::new(nb);
-        let a_out = ectx.output(ui, a, output).unwrap();
-        let b_in = ectx.input(ui, b, input).unwrap();
-        let bezier = egui_graph::bezier::Cubic::from_edge_points(a_out, b_in);
-        let dist_per_pt = 5.0;
-        let pts: Vec<_> = bezier.flatten(dist_per_pt).collect();
+        let mut selected = state.interaction.selection.edges.contains(&e);
+        let response =
+            egui_graph::edge::Edge::new((a, output), (b, input), &mut selected).show(ectx, ui);
 
-        // Check if mouse is over the bezier curve
-        let closest_point = bezier.closest_point(dist_per_pt, egui::Pos2::from(mouse_pos));
-        let distance_to_mouse = closest_point.distance(egui::Pos2::from(mouse_pos));
-        if distance_to_mouse < selection_threshold && click {
-            clicked_on_edge = true;
-            // If Shift is not held, clear previous selection
-            if !shift_held {
-                state.interaction.selection.edges.clear();
+        if response.deleted() {
+            state.graph.remove_edge(e);
+            state.interaction.selection.edges.remove(&e);
+        } else if response.changed() {
+            if selected {
+                state.interaction.selection.edges.insert(e);
+            } else {
+                state.interaction.selection.edges.remove(&e);
             }
-            // Add the clicked edge to the selection
-            state.interaction.selection.edges.insert(e);
         }
-
-        let wire_stroke = if state.interaction.selection.edges.contains(&e) {
-            egui::Stroke {
-                width: state.wire_width * 4.0,
-                color: state.wire_color.linear_multiply(1.5),
-            }
-        } else {
-            stroke
-        };
-
-        // Draw the bezier curve
-        ui.painter()
-            .add(egui::Shape::line(pts.clone(), wire_stroke));
-    }
-
-    if click && !clicked_on_edge {
-        // Click occurred on the canvas, clear the selection
-        state.interaction.selection.edges.clear();
     }
 
     // Draw the in-progress edge if there is one.
     if let Some(edge) = ectx.in_progress(ui) {
-        let bezier = edge.bezier_cubic();
-        let dist_per_pt = 5.0;
-        let pts = bezier.flatten(dist_per_pt).collect();
-        ui.painter().add(egui::Shape::line(pts, stroke));
-    }
-
-    // Remove selected edges if delete/backspace is pressed
-    if ui.input(|i| i.key_pressed(egui::Key::Delete) | i.key_pressed(egui::Key::Backspace)) {
-        state.interaction.selection.edges.iter().for_each(|e| {
-            state.graph.remove_edge(*e);
-        });
-        state.interaction.selection.nodes.clear();
+        edge.show(ui);
     }
 }
 
-fn graph_config(ui: &mut egui::Ui, state: &mut State) {
+fn graph_config(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut State) {
     let mut frame = egui::Frame::window(ui.style());
     frame.shadow.spread = 0;
     frame.shadow.offset = [0, 0];
@@ -346,11 +325,13 @@ fn graph_config(ui: &mut egui::Ui, state: &mut State) {
                 ui.separator();
                 ui.add_enabled_ui(!state.auto_layout, |ui| {
                     if ui.button("Layout Once").clicked() {
-                        state.view.layout =
+                        view.layout =
                             layout(&state.graph, state.flow, state.node_spacing, ui.ctx());
                     }
                 });
             });
+            ui.checkbox(&mut state.dot_grid, "Show Dot Grid");
+            ui.checkbox(&mut state.center_view, "Center View");
             ui.horizontal(|ui| {
                 ui.label("Flow:");
                 ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");
@@ -364,19 +345,23 @@ fn graph_config(ui: &mut egui::Ui, state: &mut State) {
                 ui.label("Node spacing Y:");
                 ui.add(egui::Slider::new(&mut state.node_spacing[1], 0.5..=2.0));
             });
-            ui.horizontal(|ui| {
-                ui.label("Wire width:");
-                ui.add(egui::Slider::new(&mut state.wire_width, 0.5..=10.0));
+            ui.checkbox(&mut state.custom_edge_style, "Custom Edge Style");
+            ui.add_enabled_ui(state.custom_edge_style, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Edge width:");
+                    ui.add(egui::Slider::new(&mut state.edge_width, 0.5..=10.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Socket radius:");
+                    ui.add(egui::Slider::new(&mut state.socket_radius, 1.0..=10.0));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Edge color:");
+                    ui.color_edit_button_srgba(&mut state.edge_color);
+                    ui.label("Socket color:");
+                    ui.color_edit_button_srgba(&mut state.socket_color);
+                });
             });
-            ui.horizontal(|ui| {
-                ui.label("Socket radius:");
-                ui.add(egui::Slider::new(&mut state.socket_radius, 1.0..=10.0));
-            });
-            ui.horizontal(|ui| {
-                ui.label("Wire color:");
-                ui.color_edit_button_srgba(&mut state.wire_color);
-                ui.label("Socket color:");
-                ui.color_edit_button_srgba(&mut state.socket_color);
-            });
+            ui.label(format!("Scene: {:?}", view.scene_rect));
         });
 }
