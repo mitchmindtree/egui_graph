@@ -25,6 +25,7 @@ struct State {
     custom_edge_style: bool,
     edge_width: f32,
     edge_color: egui::Color32,
+    #[cfg(feature = "layout")]
     auto_layout: bool,
     node_spacing: [f32; 2],
     node_id_map: HashMap<egui::Id, NodeIndex>,
@@ -73,6 +74,7 @@ impl App {
             edge_width: 1.0,
             edge_color: ctx.style().visuals.weak_text_color(),
             flow: egui::Direction::TopDown,
+            #[cfg(feature = "layout")]
             auto_layout: true,
             node_spacing: [1.0, 1.0],
             node_id_map: Default::default(),
@@ -86,6 +88,7 @@ impl App {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        #[cfg(feature = "layout")]
         if self.state.auto_layout {
             self.view.layout = layout(
                 &self.state.graph,
@@ -121,6 +124,7 @@ fn node(name: impl ToString, kind: NodeKind) -> Node {
     Node { name, kind }
 }
 
+#[cfg(feature = "layout")]
 fn layout(
     graph: &Graph,
     flow: egui::Direction,
@@ -320,6 +324,7 @@ fn graph_config(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut Stat
         .auto_sized()
         .show(ui.ctx(), |ui| {
             ui.label("GRAPH CONFIG");
+            #[cfg(feature = "layout")]
             ui.horizontal(|ui| {
                 ui.checkbox(&mut state.auto_layout, "Automatic Layout");
                 ui.separator();

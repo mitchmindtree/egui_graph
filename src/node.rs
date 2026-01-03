@@ -196,9 +196,9 @@ impl Node {
             self.animation_time
         };
         let pos_graph = {
+            let idx = ctx.graph_id.with(self.id).with("x");
+            let idy = ctx.graph_id.with(self.id).with("y");
             let ctx = ui.ctx();
-            let idx = self.id.with("x");
-            let idy = self.id.with("y");
             let x = ctx.animate_value_with_time(idx, target_pos_graph.x, animation_time);
             let y = ctx.animate_value_with_time(idy, target_pos_graph.y, animation_time);
             egui::Pos2::new(x, y)
@@ -293,7 +293,7 @@ impl Node {
 
         // Put the node's frame on a layer above the scene's UI layer.
         let scene_layer = ui.layer_id();
-        let frame_layer = egui::LayerId::new(scene_layer.order, self.id);
+        let frame_layer = egui::LayerId::new(scene_layer.order, ctx.graph_id.with(self.id));
         ui.ctx().set_sublayer(scene_layer, frame_layer);
         if let Some(transform) = ui.ctx().layer_transform_to_global(scene_layer) {
             ui.ctx().set_transform_layer(frame_layer, transform);
