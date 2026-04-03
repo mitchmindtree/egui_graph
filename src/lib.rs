@@ -254,7 +254,7 @@ impl Graph {
 
         // Create the Scene.
         let mut scene = egui::containers::Scene::new()
-            .zoom_range(self.zoom_range.clone())
+            .zoom_range(self.zoom_range)
             .drag_pan_buttons(egui::containers::DragPanButtons::MIDDLE);
         if let Some(max_inner_size) = self.max_inner_size {
             scene = scene.max_inner_size(max_inner_size);
@@ -449,8 +449,8 @@ impl<'a> Show<'a> {
                 selection_rect,
                 select,
                 socket_press_released,
-                visited: &mut *visited,
-                layout: &mut *layout,
+                visited,
+                layout,
             };
             content(&mut ctx, ui);
         }

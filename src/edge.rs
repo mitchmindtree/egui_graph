@@ -156,9 +156,7 @@ impl<'a> Edge<'a> {
         let pts: Vec<_> = bezier.flatten(distance_per_point).collect();
         let stroke = if *selected {
             ui.style().visuals.selection.stroke
-        } else if hovered {
-            ui.style().visuals.widgets.hovered.fg_stroke
-        } else if under_selection_rect && ui.input(|i| i.modifiers.shift) {
+        } else if hovered || (under_selection_rect && ui.input(|i| i.modifiers.shift)) {
             ui.style().visuals.widgets.hovered.fg_stroke
         } else {
             ui.style().visuals.widgets.noninteractive.fg_stroke

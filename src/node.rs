@@ -284,10 +284,8 @@ impl Node {
                     if gmem.selection.nodes.insert(self.id) {
                         selection_changed = true;
                     }
-                } else if !ui.input(|i| i.modifiers.ctrl) {
-                    if gmem.selection.nodes.remove(&self.id) {
-                        selection_changed = true;
-                    }
+                } else if !ui.input(|i| i.modifiers.ctrl) && gmem.selection.nodes.remove(&self.id) {
+                    selection_changed = true;
                 }
             }
 
@@ -423,10 +421,8 @@ impl Node {
                         let index = c.index;
                         edge_event = Some(EdgeEvent::Ended { kind, index });
                     }
-                } else if edge_event.is_none() {
-                    if self.id == r.node {
-                        edge_event = Some(EdgeEvent::Cancelled);
-                    }
+                } else if edge_event.is_none() && self.id == r.node {
+                    edge_event = Some(EdgeEvent::Cancelled);
                 }
             }
         }
