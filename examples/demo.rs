@@ -20,7 +20,6 @@ struct State {
     graph: Graph,
     interaction: Interaction,
     flow: egui::Direction,
-    collapse_nodes: bool,
     socket_radius: f32,
     socket_color: egui::Color32,
     custom_edge_style: bool,
@@ -69,7 +68,6 @@ impl App {
         let state = State {
             graph,
             interaction: Default::default(),
-            collapse_nodes: false,
             socket_color: ctx.style().visuals.weak_text_color(),
             socket_radius: 3.0,
             custom_edge_style: false,
@@ -207,7 +205,6 @@ fn nodes(nctx: &mut egui_graph::NodesCtx, ui: &mut egui::Ui, state: &mut State) 
         let response = egui_graph::node::Node::from_id(egui_id)
             .inputs(inputs)
             .outputs(outputs)
-            .collapsed(state.collapse_nodes)
             .flow(state.flow)
             .socket_radius(state.socket_radius)
             .socket_color(state.socket_color)
@@ -338,7 +335,6 @@ fn graph_config(ui: &mut egui::Ui, view: &mut egui_graph::View, state: &mut Stat
             });
             ui.checkbox(&mut state.dot_grid, "Show Dot Grid");
             ui.checkbox(&mut state.center_view, "Center View");
-            ui.checkbox(&mut state.collapse_nodes, "Collapse Nodes");
             ui.horizontal(|ui| {
                 ui.label("Flow:");
                 ui.radio_value(&mut state.flow, egui::Direction::LeftToRight, "Right");
